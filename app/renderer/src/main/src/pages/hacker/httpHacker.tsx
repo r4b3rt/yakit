@@ -1,27 +1,12 @@
 import React, {useState, useEffect} from "react"
 import {Tabs} from "antd"
 import {MITMPage} from "../mitm/MITMPage"
-import {PlusOutlined} from "@ant-design/icons"
-import {WebsiteTreeViewer} from "../yakitStore/viewers/WebsiteTree"
-import {YakScriptExecResultTable} from "../../components/YakScriptExecResultTable"
 import {HTTPHistory} from "../../components/HTTPHistory"
-import {useMemoizedFn} from "ahooks"
 import {showDrawer} from "../../utils/showModal"
 import {HackerPlugin} from "./HackerPlugin"
 import ReactDOM from "react-dom"
 
-import "../main.scss"
-import {useHotkeys} from "react-hotkeys-hook";
-import {info} from "../../utils/notification";
-
-export interface HTTPHackerProp {
-}
-
-const defaultHTTPPacket = `GET / HTTP/1.1
-Host: www.example.com
-Uesr-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.80 Safari/537.36
-
-`
+export interface HTTPHackerProp {}
 
 const {ipcRenderer} = window.require("electron")
 
@@ -42,46 +27,17 @@ const HTTPHacker: React.FC<HTTPHackerProp> = (props) => {
             ipcRenderer.removeAllListeners("fetch-send-to-packet-hack")
         }
     }, [])
-
+    useEffect(() => {
+        ipcRenderer.on("fetch-positioning-http-history", (e, res) => {
+            if (res.activeTab) setActiveTag(res.activeTab)
+        })
+        return () => {
+            ipcRenderer.removeAllListeners("fetch-positioning-http-history")
+        }
+    }, [])
     return (
         <div style={{margin: 0, height: "100%"}}>
-            <Tabs
-                className={"httphacker-tabs"}
-                activeKey={activeTab}
-                onChange={setActiveTag}
-                type={"editable-card"}
-                tabBarGutter={2}
-                hideAdd={true}
-                onTabClick={(key, e) => {
-                    const divExisted = document.getElementById("yakit-cursor-menu")
-                    if (divExisted) {
-                        const div: HTMLDivElement = divExisted as HTMLDivElement
-                        const unmountResult = ReactDOM.unmountComponentAtNode(div)
-                        if (unmountResult && div.parentNode) {
-                            div.parentNode.removeChild(div)
-                        }
-                    }
-                }}
-            >
-                <Tabs.TabPane tab={"MITM：中间人代理与劫持"} key={"mitm"} closable={false}>
-                    <div style={{height: "100%", overflow: "auto"}}>
-                        <MITMPage/>
-                    </div>
-                </Tabs.TabPane>
-                <Tabs.TabPane tab={"HTTP History"} key={"history"} closable={false} forceRender={false}>
-                    <div style={{height: "100%"}}>
-                        <HTTPHistory/>
-                    </div>
-                </Tabs.TabPane>
-                <Tabs.TabPane tab={"插件输出"} key={"plugin"} closable={false}>
-                    <YakScriptExecResultTable/>
-                </Tabs.TabPane>
-                <Tabs.TabPane tab={"网站树视角"} key={"website-tree"} closable={false}>
-                    <div style={{height: "100%"}}>
-                        <WebsiteTreeViewer/>
-                    </div>
-                </Tabs.TabPane>
-            </Tabs>
+            <MITMPage />
         </div>
     )
 }

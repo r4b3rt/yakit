@@ -1,272 +1,154 @@
-export const MITMPluginTemplate = `# mitm plugin template
+export const HotPatchTemplate = `// 请求 -> hijackHTTPRequest -> 前端劫持 -> beforeRequest -> 服务器响应 ->  hijackResponse -> 后端劫持 -> afterRequest -> 客户端看到的响应 -> hijackSaveHTTPFlow
 
-yakit_output(MITM_PARAMS)
-
-#-----------------------MITM Hooks I/O-------------------------
-/*
-#如何使用插件参数？
-
-## 例如，如果你设置了一个参数为 url_keyword 的参数，可以通过 MITM_PARAMS 来使用它！
-urlKeyword = MITM_PARAMS["url_keyword"]
-
-# 如何输出给 Yakit 给用户查看？
-
-yakit_output(i: any) // 可以只输出到 "Console 界面"
-yakit_save(i: any)   // 可以输出并保存到数据库中，在 "插件输出" 中查看
-*/
-#----------------MITM Hooks Test And Quick Debug-----------------
-/*
-# __test__ 是 yakit mitm 插件用于调试的函数 【注意：这个函数在 MITM hooks劫持环境下不会被导入】
-
-在这个函数中，你可以使用 yakit.GenerateYakitMITMHooksParams(method: string, url: string, opts ...http.Option) 来方便的生成可供 hooks 调用的参数，参考代码模版中的用法～
-
-*/
-
-
-#--------------------------WORKSPACE-----------------------------
-__test__ = func() {
-    results, err := yakit.GenerateYakitMITMHooksParams("GET", "https://example.com")
-    if err != nil {
-        return
-    }
-    isHttps, url, reqRaw, rspRaw, body = results
-
-    mirrorHTTPFlow(results...)
-    mirrorFilteredHTTPFlow(results...)
-    mirrorNewWebsite(results...)
-    mirrorNewWebsitePath(results...)
-    mirrorNewWebsitePathParams(results...)
-}
-
-
-# mirrorHTTPFlow 会镜像所有的流量到这里，包括 .js / .css / .jpg 这类一般会被劫持程序过滤的请求
+// mirrorHTTPFlow 会镜像所有的流量到这里，包括被过滤器过滤的请求
+// !!! 一般插件不要实现这个接口
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// rsp 响应
+// body 响应体
 mirrorHTTPFlow = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
+
 }
 
-# mirrorFilteredHTTPFlow 劫持到的流量为 MITM 自动过滤出的可能和 "业务" 有关的流量，会自动过滤掉 js / css 等流量
+// mirrorFilteredHTTPFlow 会镜像过滤后的流量到这里
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// rsp 响应
+// body 响应体
 mirrorFilteredHTTPFlow = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
+
 }
 
-# mirrorNewWebsite 每新出现一个网站，这个网站的第一个请求，将会在这里被调用！
+// mirrorNewWebsite 会镜像过滤后的流量到这里，每个网站只会触发一次
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// rsp 响应
+// body 响应体
 mirrorNewWebsite = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
+
 }
 
-# mirrorNewWebsitePath 每新出现一个网站路径，关于这个网站路径的第一个请求，将会在这里被传入回调
+// mirrorNewWebsitePath 会镜像过滤后的流量到这里，每个网站的相同路径只会触发一次
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// rsp 响应
+// body 响应体
 mirrorNewWebsitePath = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
+
 }
 
-# mirrorNewWebsitePathParams 每新出现一个网站路径且带有一些参数，参数通过常见位置和参数名去重，去重的第一个 HTTPFlow 在这里被调用
+// mirrorNewWebsitePathParams 会镜像过滤后的流量到这里，每个网站的参数相同的请求只会触发一次
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// rsp 响应
+// body 响应体
 mirrorNewWebsitePathParams = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
+
 }
 
-
-# hijackHTTPRequest 每一个新的 HTTPRequest 将会被这个 HOOK 劫持，劫持后通过 forward(modifed) 来把修改后的请求覆盖，如果需要屏蔽该数据包，通过 drop() 来屏蔽
-# ATTENTION-DEMO:
-#   hijacked = str.ReplaceAll(string(req), "abc", "bcd")
-#       1. forward(hijacked)：确认转发
-#       2. drop() 丢包
-#       3. 如果 forward 和 drop 都没有被调用，则使用默认数据流
-#       4. 如果 drop 和 forward 在一个劫持中都被调用到了，以 drop 为准
-/*
-# Demo2 Best In Practice
-hijackHTTPRequest = func(isHttps, url, req, forward, drop) {
-    if str.Contains(string(req), "/products/plugins/plugin_11") {
-        forward(str.ReplaceAll(string(req), "/products/plugins/plugin_11", "/products/plugins/plugin_create"))
-    } 
-
-    if str.Contains(string(req), "/products/plugins/plugin_12") {
-        drop()
-    } 
-}
-*/
+// hijackHTTPRequest 会在过滤后的请求到达Yakit MITM前被调用，可以通过该函数提前将请求修改或丢弃
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// forward(req) 提交修改后的请求，如果未被调用，则使用原始的请求
+// drop() 丢弃请求
 hijackHTTPRequest = func(isHttps, url, req, forward /*func(modifiedRequest []byte)*/, drop /*func()*/) {
+    // Example:
+    // if str.Contains(string(req), "/should_modify") {
+    //     modified = str.ReplaceAll(string(req), "/should_modify", "/modified")
+    //     forward(poc.FixHTTPRequest(modified))
+    // } 
 
+    // if str.Contains(string(req), "/drop") {
+    //     drop()
+    // } 
 }
 
-# hijackSaveHTTPFlow 是 Yakit 开放的 MITM 存储过程的 Hook 函数
-# 这个函数允许用户在 HTTP 数据包存入数据库前进行过滤或者修改，增加字段，染色等
-# 类似 hijackHTTPRequest
-#    1. hijackSaveHTTPFlow 也采用了 JS Promise 的回调处理方案，用户可以在这个方法体内进行修改，修改完通过 modify(flow) 来进行保存
-#    2. 如果用户不想保存数据包，使用 drop() 即可
-# 
-/**
-案例:
 
-hijackSaveHTTPFlow = func(flow, modify, drop) {
-    if str.Contains(flow.Url, "/admin/") {
-        flow.Red()   # 设置颜色
-        modify(flow) # 保存
-    }
+// hijackHTTPResponse 会在过滤后的响应到达Yakit MITM前被调用，可以通过该函数提前将响应修改或丢弃
+// isHttps 请求是否为https请求
+// url 网站URL
+// rsp 响应
+// forward(req) 提交修改后的响应，如果未被调用，则使用原始的响应
+// drop() 丢弃响应
+hijackHTTPResponse = func(isHttps  /*bool*/, url  /*string*/, rsp /*[]byte*/, forward /*func(modifiedResponse []byte)*/, drop /*func()*/) {
+    // Example:
+    // if str.Contains(string(rsp), "凝聚磅礴的中国文学力量") {
+    //     modified = poc.FixHTTPResponse(str.ReplaceAll(rsp, "凝聚磅礴的中国文学力量", "AAAAAAAAAAAAAAAA"))
+    //     forward(modified)
+    // }
 }
-*/
 
+// hijackHTTPResponseEx 是hijackHTTPResponse的扩展，能够获取到响应对应的请求，会在过滤后的响应到达Yakit MITM前被调用，可以通过该函数提前将响应修改或丢弃
+// !!! 通常实现hijackHTTPResponse 或 hijackHTTPResponseEx 其中一个函数即可
+// isHttps 请求是否为https请求
+// url 网站URL
+// req 请求
+// rsp 响应
+// forward(req) 提交修改后的响应，如果未被调用，则使用原始的响应
+// drop() 丢弃响应
+hijackHTTPResponseEx = func(isHttps  /*bool*/, url  /*string*/, req/*[]byte*/, rsp /*[]byte*/, forward /*func(modifiedResponse []byte)*/, drop /*func()*/) {
+    // Example:
+    // if str.Contains(string(rsp), "凝聚磅礴的中国文学力量") {
+    //     modified = poc.FixHTTPResponse(str.ReplaceAll(rsp, "凝聚磅礴的中国文学力量", "AAAAAAAAAAAAAAAA"))
+    //     forward(modified)
+    // }
+}
+
+// beforeRequest 会在请求到达服务器之前被调用,可以通过该函数对请求做最后一次修改
+// isHttps 请求是否为https请求
+// oreq 原始请求
+// req hijackRequest修改后的请求
+// 返回值: 修改后的请求,如果没有返回值则使用hijackRequest修改后的请求
+beforeRequest = func(ishttps /*bool*/, oreq /*[]byte*/, req/*[]byte*/){
+    // Example:
+	// if str.Contains(string(req), "凝聚磅礴的中国文学力量") {
+    //     modified = poc.FixHTTPRequest(str.ReplaceAll(req, "凝聚磅礴的中国文学力量", "AAAAAAAAAAAAAAAA"))
+    //     return []byte(modified)
+    // }
+}
+
+// afterRequest 会在响应到达客户端之前被调用,可以通过该函数对响应做最后一次修改
+// isHttps 请求是否为https请求
+// oreq 原始请求
+// req hijackRequest修改后的请求
+// orsp 原始响应
+// rsp hijackHTTPResponse/hijackHTTPResponseEx修改后的响应
+// 返回值: 修改后的响应,如果没有返回值则使用hijackHTTPResponse/hijackHTTPResponseEx修改后的响应
+afterRequest = func(ishttps, oreq/*原始请求*/ ,req/*hiajck修改之后的请求*/ ,orsp/*原始响应*/ ,rsp/*hijack修改后的响应*/){
+    // Example:
+	// if str.Contains(string(rsp), "凝聚磅礴的中国文学力量") {
+    //     modified = poc.FixHTTPRequest(str.ReplaceAll(rsp, "凝聚磅礴的中国文学力量", "AAAAAAAAAAAAAAAA"))
+    //     return []byte(modified)
+    // }
+}
+
+// hijackSaveHTTPFlow 会在流量被存储到数据库前被调用,可以通过该函数对入库前的流量进行修改,例如修改请求/响应,添加tag/染色等
+// flow 流量结构体,可以通过鼠标悬浮提示查看其拥有的字段并对其进行修改
+// modify(modified) 提交修改后的流量结构体，如果未被调用，则使用原始的流量结构体
+// drop() 丢弃流量
 hijackSaveHTTPFlow = func(flow /* *yakit.HTTPFlow */, modify /* func(modified *yakit.HTTPFlow) */, drop/* func() */) {
+    // flow.Request 转义后的请求
+    // flow.Response 转义后的响应
+    // 对于转义后的请求和响应,需要通过以下方式拿到原始的请求/响应
+    // req = str.Unquote(flow.Request)~
+    // rsp = str.Unquote(flow.Response)~
+    // 对于修改后的请求和响应,需要通过以下方式再将其转义回去
+    // flow.Request = str.Quote(req)
+    // flow.Response = str.Quote(rsp)
+    // flow.AddTag("tag") // 添加tag
+    // flow.Red() // 染红色
+    // 
+    // Example:
     // responseBytes, _ = codec.StrconvUnquote(flow.Response)
-    // if str.MatchAnyOfRegexp(responseBytes, "/admin/", "accessKey") { flow.Red(); modify(flow) }
+    // if str.MatchAnyOfRegexp(responseBytes, "/admin/", "accessKey") { 
+    //     flow.Red(); 
+    //     modify(flow) 
+    // }
 }
-
-/* 定义速查
-
-*yakit.HTTPFlow 定义：
-type palm/common/yakgrpc/yakit.(HTTPFlow) struct {
-  Fields(可用字段):
-      Model: gorm.Model
-      Hash: string
-      IsHTTPS: bool
-      Url: string
-      Path: string
-      Method: string
-      BodyLength: int64
-      ContentType: string
-      StatusCode: int64
-      SourceType: string
-      Request: string                   # 需要通过 codec.StrconvUnquote 解码
-      Response: string                  # 需要通过 codec.StrconvUnquote 解码
-      GetParamsTotal: int
-      PostParamsTotal: int
-      CookieParamsTotal: int
-      IPAddress: string
-      RemoteAddr: string
-      IPInteger: int
-      Tags: string
-  StructMethods(结构方法/函数):
-  PtrStructMethods(指针结构方法/函数):
-      func AddTag(v1: string)
-      func BeforeSave() return(error)
-      func Blue()                                           # 蓝色
-      func CalcHash() return(string)                         
-      func ColorSharp(v1: string)
-      func Cyan()                                           # 天蓝色
-      func Green()                                          # 绿色
-      func Grey()                                           # 灰色
-      func Orange()                                         # 橙色
-      func Purple()                                         # 紫色
-      func Red()                                            # 红色
-      func RemoteColor()
-      func ToGRPCModel() return(*ypb.HTTPFlow, error)
-      func ToGRPCModelFull() return(*ypb.HTTPFlow, error)
-      func Yellow()                                         # 黄色
-}
-*/
-`
-
-export const MITMPluginTemplateShort = `# mirrorHTTPFlow 会镜像所有的流量到这里，包括 .js / .css / .jpg 这类一般会被劫持程序过滤的请求
-mirrorHTTPFlow = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
-}
-
-# mirrorFilteredHTTPFlow 劫持到的流量为 MITM 自动过滤出的可能和 "业务" 有关的流量，会自动过滤掉 js / css 等流量
-mirrorFilteredHTTPFlow = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
-}
-
-# mirrorNewWebsite 每新出现一个网站，这个网站的第一个请求，将会在这里被调用！
-mirrorNewWebsite = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
-}
-
-# mirrorNewWebsitePath 每新出现一个网站路径，关于这个网站路径的第一个请求，将会在这里被传入回调
-mirrorNewWebsitePath = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
-}
-
-# mirrorNewWebsitePathParams 每新出现一个网站路径且带有一些参数，参数通过常见位置和参数名去重，去重的第一个 HTTPFlow 在这里被调用
-mirrorNewWebsitePathParams = func(isHttps /*bool*/, url /*string*/, req /*[]byte*/, rsp /*[]byte*/, body /*[]byte*/) {
-    
-}
-
-
-# hijackHTTPRequest 每一个新的 HTTPRequest 将会被这个 HOOK 劫持，劫持后通过 forward(modifed) 来把修改后的请求覆盖，如果需要屏蔽该数据包，通过 drop() 来屏蔽
-# ATTENTION-DEMO:
-#   hijacked = str.ReplaceAll(string(req), "abc", "bcd")
-#       1. forward(hijacked)：确认转发
-#       2. drop() 丢包
-#       3. 如果 forward 和 drop 都没有被调用，则使用默认数据流
-#       4. 如果 drop 和 forward 在一个劫持中都被调用到了，以 drop 为准
-/*
-# Demo2 Best In Practice
-hijackHTTPRequest = func(isHttps, url, req, forward, drop) {
-    if str.Contains(string(req), "/products/plugins/plugin_11") {
-        forward(str.ReplaceAll(string(req), "/products/plugins/plugin_11", "/products/plugins/plugin_create"))
-    } 
-
-    if str.Contains(string(req), "/products/plugins/plugin_12") {
-        drop()
-    } 
-}
-*/
-hijackHTTPRequest = func(isHttps, url, req, forward /*func(modifiedRequest []byte)*/, drop /*func()*/) {
-
-}
-
-# hijackSaveHTTPFlow 是 Yakit 开放的 MITM 存储过程的 Hook 函数
-# 这个函数允许用户在 HTTP 数据包存入数据库前进行过滤或者修改，增加字段，染色等
-# 类似 hijackHTTPRequest
-#    1. hijackSaveHTTPFlow 也采用了 JS Promise 的回调处理方案，用户可以在这个方法体内进行修改，修改完通过 modify(flow) 来进行保存
-#    2. 如果用户不想保存数据包，使用 drop() 即可
-# 
-/**
-案例:
-
-hijackSaveHTTPFlow = func(flow, modify, drop) {
-    if str.Contains(flow.Url, "/admin/") {
-        flow.Red()   # 设置颜色
-        modify(flow) # 保存
-    }
-}
-*/
-
-hijackSaveHTTPFlow = func(flow /* *yakit.HTTPFlow */, modify /* func(modified *yakit.HTTPFlow) */, drop/* func() */) {
-    // responseBytes, _ = codec.StrconvUnquote(flow.Response)
-    // if str.MatchAnyOfRegexp(responseBytes, "/admin/", "accessKey") { flow.Red(); modify(flow) }
-}
-
-/* 定义速查
-
-*yakit.HTTPFlow 定义：
-type palm/common/yakgrpc/yakit.(HTTPFlow) struct {
-  Fields(可用字段):
-      Model: gorm.Model
-      Hash: string
-      IsHTTPS: bool
-      Url: string
-      Path: string
-      Method: string
-      BodyLength: int64
-      ContentType: string
-      StatusCode: int64
-      SourceType: string
-      Request: string                   # 需要通过 codec.StrconvUnquote 解码
-      Response: string                  # 需要通过 codec.StrconvUnquote 解码
-      GetParamsTotal: int
-      PostParamsTotal: int
-      CookieParamsTotal: int
-      IPAddress: string
-      RemoteAddr: string
-      IPInteger: int
-      Tags: string
-  StructMethods(结构方法/函数):
-  PtrStructMethods(指针结构方法/函数):
-      func AddTag(v1: string)
-      func BeforeSave() return(error)
-      func Blue()                                           # 蓝色
-      func CalcHash() return(string)                         
-      func ColorSharp(v1: string)
-      func Cyan()                                           # 天蓝色
-      func Green()                                          # 绿色
-      func Grey()                                           # 灰色
-      func Orange()                                         # 橙色
-      func Purple()                                         # 紫色
-      func Red()                                            # 红色
-      func RemoteColor()
-      func ToGRPCModel() return(*ypb.HTTPFlow, error)
-      func ToGRPCModelFull() return(*ypb.HTTPFlow, error)
-      func Yellow()                                         # 黄色
-}
-*/
 `

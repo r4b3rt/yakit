@@ -1,9 +1,9 @@
 import React, {useEffect, useRef, useState} from "react";
 import {YakQueryHTTPFlowRequest} from "../utils/yakQueryHTTPFlow";
 import {genDefaultPagination, QueryGeneralResponse} from "../pages/invoker/schema";
-import {HTTPFlow, onExpandHTTPFlow, StatusCodeToColor} from "./HTTPFlowTable";
-import * as antd from "antd";
-import {Button, Space, Tag} from "antd";
+import {HTTPFlow, onExpandHTTPFlow, StatusCodeToColor} from "./HTTPFlowTable/HTTPFlowTable";
+// import * as antd from "antd";
+import {Button, Space, Tag,Tooltip} from "antd";
 import {BaseTable, features, useTablePipeline} from "../alibaba/ali-react-table-dist";
 import {CopyableField} from "../utils/inputUtil";
 import {showDrawer} from "../utils/showModal";
@@ -19,6 +19,7 @@ export interface HTTPFlowMiniTableProp {
     filter: YakQueryHTTPFlowRequest
     onTotal: (total: number) => any
     onSendToWebFuzzer?: (isHttps: boolean, request: string) => any
+    downstreamProxyStr?: string
 }
 
 export const HTTPFlowMiniTable: React.FC<HTTPFlowMiniTableProp> = React.memo((props) => {
@@ -36,7 +37,9 @@ export const HTTPFlowMiniTable: React.FC<HTTPFlowMiniTableProp> = React.memo((pr
     const [inViewport] = useInViewport(ref);
 
     const pipeline = useTablePipeline({
-        components: antd,
+        components: {
+            'Tooltip':Tooltip
+        },
     }).input({
         dataSource: response.Data,
         columns: props.simple ? [
@@ -102,8 +105,10 @@ export const HTTPFlowMiniTable: React.FC<HTTPFlowMiniTableProp> = React.memo((pr
                                         width: "80%",
                                         content: onExpandHTTPFlow(
                                             findHTTPFlowById(i),
-                                            () => m.destroy()
+                                            () => m.destroy(),
+                                            props.downstreamProxyStr || ""
                                         ),
+                                        bodyStyle: {paddingTop: 5}
                                     })
                                 }}
                             >详情</Button>
@@ -168,8 +173,10 @@ export const HTTPFlowMiniTable: React.FC<HTTPFlowMiniTableProp> = React.memo((pr
                                         width: "80%",
                                         content: onExpandHTTPFlow(
                                             findHTTPFlowById(i),
-                                            () => m.destroy()
-                                        )
+                                            () => m.destroy(),
+                                            props.downstreamProxyStr || ""
+                                        ),
+                                        bodyStyle: {paddingTop: 5}
                                     })
                                 }}
                             >详情</Button>

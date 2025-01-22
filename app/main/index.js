@@ -1,12 +1,25 @@
-const {app, BrowserWindow, dialog, nativeImage, ipcMain, session} = require("electron")
+const {app, BrowserWindow, dialog, nativeImage, globalShortcut, ipcMain, protocol, Menu} = require("electron")
 const isDev = require("electron-is-dev")
 const path = require("path")
-const {extrakvpairs, getExtraKVPair, setExtraKVPair} = require("./handlers/upgradeUtil")
+const url = require("url")
 const {registerIPC, clearing} = require("./ipc")
-const {service, httpApi} = require("./httpServer")
-const {USER_INFO, HttpSetting} = require("./state")
-
 const process = require("process")
+const {initExtraLocalCache, getExtraLocalCacheValue, initLocalCache, setCloeseExtraLocalCache} = require("./localCache")
+const {asyncKillDynamicControl} = require("./handlers/dynamicControlFun")
+const {windowStatePatch, engineLog, renderLog, printLog} = require("./filePath")
+const fs = require("fs")
+const Screenshots = require("./screenshots")
+const windowStateKeeper = require("electron-window-state")
+const {clearFolder} = require("./toolsFunc")
+const {MenuTemplate} = require("./menu")
+
+/** 获取缓存数据-软件是否需要展示关闭二次确认弹框 */
+const UICloseFlag = "windows-close-flag"
+
+/** 主进程窗口对象 */
+let win
+// 是否展示关闭二次确认弹窗的标志位
+let closeFlag = true
 
 process.on("uncaughtException", (error) => {
     console.info(error)
@@ -14,17 +27,25 @@ process.on("uncaughtException", (error) => {
 
 // 性能优化：https://juejin.cn/post/6844904029231775758
 
-let flag = true // 是否展示关闭二次确认弹窗的标志位
-let win
 const createWindow = () => {
-    getExtraKVPair((err) => {
-        if (!err)
-            flag = extrakvpairs.get("windows-close-flag") === undefined ? true : extrakvpairs.get("windows-close-flag")
+    /** 获取缓存数据并储存于软件内 */
+    initLocalCache()
+    /** 获取扩展缓存数据并储存于软件内(是否弹出关闭二次确认弹窗) */
+    initExtraLocalCache(() => {
+        const cacheFlag = getExtraLocalCacheValue(UICloseFlag)
+        closeFlag = cacheFlag === undefined ? true : cacheFlag
     })
-
+    let mainWindowState = windowStateKeeper({
+        defaultWidth: 900,
+        defaultHeight: 500,
+        path: windowStatePatch,
+        file: "yakit-window-state.json"
+    })
     win = new BrowserWindow({
-        width: 1600,
-        height: 1000,
+        x: mainWindowState.x,
+        y: mainWindowState.y,
+        width: mainWindowState.width,
+        height: mainWindowState.height,
         minWidth: 900,
         minHeight: 500,
         autoHideMenuBar: true,
@@ -33,10 +54,12 @@ const createWindow = () => {
             nodeIntegration: true,
             contextIsolation: false,
             sandbox: true
-        }
+        },
+        frame: false,
+        titleBarStyle: "hidden"
     })
-
-    // win.loadFile(path.resolve(__dirname, "../renderer/pages/main/index.html"))
+    win.setSize(mainWindowState.width, mainWindowState.height)
+    mainWindowState.manage(win)
     if (isDev) {
         win.loadURL("http://127.0.0.1:3000")
     } else {
@@ -47,11 +70,106 @@ const createWindow = () => {
     if (isDev) {
         win.webContents.openDevTools({mode: "detach"})
     }
+    win.setMenu(null)
+    win.setMenuBarVisibility(false)
+    if (process.platform === "darwin") win.setWindowButtonVisibility(false)
 
-    win.on("close", (e) => {
+    win.on("close", async (e) => {
         e.preventDefault()
+        mainWindowState.saveState(win)
+        // 关闭app时通知渲染进程 渲染进程操作后再进行关闭
+        win.webContents.send("close-windows-renderer")
+    })
+    win.on("minimize", (e) => {
+        win.webContents.send("refresh-token")
+        // 关闭app时通知渲染进程 渲染进程操作后再进行关闭
+        win.webContents.send("minimize-windows-renderer")
+    })
+    win.on("maximize", (e) => {
+        win.webContents.send("refresh-token")
+    })
+    // 阻止内部react页面的链接点击跳转
+    win.webContents.on("will-navigate", (e, url) => {
+        e.preventDefault()
+    })
+    // 录屏
+    // globalShortcut.register("Control+Shift+X", (e) => {
+    //     win.webContents.send("open-screenCap-modal")
+    // })
+}
 
-        if (flag) {
+/**
+ * set software menu
+ */
+
+const menu = Menu.buildFromTemplate(MenuTemplate)
+Menu.setApplicationMenu(menu)
+
+app.whenReady().then(() => {
+    // 截图功能的注册(功能和全局快捷键的注册)
+    if (["darwin", "win32"].includes(process.platform)) {
+        const screenshots = new Screenshots({
+            singleWindow: true
+        })
+
+        ipcMain.handle("activate-screenshot", () => {
+            screenshots.startCapture()
+            globalShortcut.register("esc", () => {
+                screenshots.endCapture()
+                globalShortcut.unregister("esc")
+            })
+        })
+
+        // globalShortcut.register("Control+Shift+b", () => {
+        //     screenshots.startCapture()
+        //     globalShortcut.register("esc", () => {
+        //         screenshots.endCapture()
+        //         globalShortcut.unregister("esc")
+        //     })
+        // })
+        globalShortcut.register("Control+Shift+q", () => {
+            screenshots.endCapture()
+            globalShortcut.unregister("esc")
+        })
+
+        // 点击确定按钮回调事件
+        screenshots.on("ok", (e, buffer, bounds) => {
+            if (screenshots.$win?.isFocused()) {
+                screenshots.endCapture()
+                globalShortcut.unregister("esc")
+            }
+        })
+        // 点击取消按钮回调事件
+        screenshots.on("cancel", () => {
+            globalShortcut.unregister("esc")
+        })
+    }
+
+    /**
+     * error-log:
+     * 存在则检查文件数量是否超过10个，超过则只保留最近10个文件
+     * 不存在则新建文件夹
+     */
+    if (fs.existsSync(engineLog)) {
+        clearFolder(engineLog, 9)
+    } else {
+        fs.mkdirSync(engineLog, {recursive: true})
+    }
+    if (fs.existsSync(renderLog)) {
+        clearFolder(renderLog, 9)
+    } else {
+        fs.mkdirSync(renderLog, {recursive: true})
+    }
+    if (fs.existsSync(printLog)) {
+        clearFolder(printLog, 9)
+    } else {
+        fs.mkdirSync(printLog, {recursive: true})
+    }
+
+    // 软件退出的逻辑
+    ipcMain.handle("app-exit", async (e, params) => {
+        const showCloseMessageBox = params.showCloseMessageBox
+        if (closeFlag && showCloseMessageBox) {
             dialog
                 .showMessageBox(win, {
                     icon: nativeImage.createFromPath(path.join(__dirname, "../assets/yakitlogo.pic.jpg")),
@@ -65,8 +183,9 @@ const createWindow = () => {
                     checkboxChecked: false,
                     noLink: true
                 })
-                .then((res) => {
-                    setExtraKVPair("windows-close-flag", !res.checkboxChecked)
+                .then(async (res) => {
+                    await setCloeseExtraLocalCache(UICloseFlag, !res.checkboxChecked)
+                    await asyncKillDynamicControl()
                     if (res.response === 0) {
                         e.preventDefault()
                         win.minimize()
@@ -80,24 +199,20 @@ const createWindow = () => {
                     }
                 })
         } else {
+            // close时关掉远程控制
+            await asyncKillDynamicControl()
             win = null
             clearing()
             app.exit()
         }
     })
-    win.on("minimize", (e) => {
-        win.webContents.send("refresh-token")
-    })
-    win.on("maximize", (e) => {
-        win.webContents.send("refresh-token")
-    })
-    // 阻止内部react页面的链接点击跳转
-    win.webContents.on("will-navigate", (e, url) => {
-        e.preventDefault()
-    })
-}
 
-app.whenReady().then(() => {
+    // 协议
+    protocol.registerFileProtocol("atom", (request, callback) => {
+        const filePath = url.fileURLToPath("file://" + request.url.slice("atom://".length))
+        callback(filePath)
+    })
+
     createWindow()
 
     try {
@@ -116,137 +231,10 @@ app.whenReady().then(() => {
     })
 })
 
+// 这个退出压根执行不到 win.on("close") 阻止了默认行为
 app.on("window-all-closed", function () {
     clearing()
     app.quit()
     // macos quit;
     // if (process.platform !== 'darwin') app.quit()
-})
-
-// login modal
-ipcMain.on("user-sign-in", (event, arg) => {
-    const excludeUrl = ["github.com", "open.weixin.qq.com"]
-    const typeApi = {
-        github: "auth/from-github/callback",
-        wechat: "auth/from-wechat/callback",
-        qq: "auth/from-qq/callback"
-    }
-
-    const {url = "", type} = arg
-    const geturlparam = (url) => {
-        let p = url.split("?")[1]
-        return new URLSearchParams(p)
-    }
-
-    var authWindow = new BrowserWindow({
-        width: 600,
-        height: 500,
-        autoHideMenuBar: true,
-        resizable: true,
-        parent: win,
-        minimizable: false,
-        webPreferences: {
-            nodeIntegration: true
-        }
-    })
-    authWindow.show()
-    authWindow.loadURL(url)
-    authWindow.webContents.on("will-navigate", (event, url) => {
-        if (!url) return
-        if (!typeApi[type]) return
-        if (excludeUrl.filter((item) => url.indexOf(item) > -1).length > 0) return
-
-        const params = geturlparam(url)
-        const wxCode = params.get("code")
-        if (!wxCode) {
-            authWindow.webContents.session.clearStorageData()
-            win.webContents.send("fetch-signin-data", {ok: false, info: "code获取失败,请重新登录！"})
-            authWindow.close()
-            return
-        }
-        httpApi("get", typeApi[type], {code: wxCode})
-            .then((res) => {
-                if (!authWindow) return
-                if (res.code !== 200) {
-                    authWindow.webContents.session.clearStorageData()
-                    win.webContents.send("fetch-signin-data", {
-                        ok: false,
-                        info: res.data.reason || "请求异常，请重新登录！"
-                    })
-                    authWindow.close()
-                    return
-                }
-
-                const info = res.data
-                const user = {
-                    isLogin: true,
-                    platform: info.from_platform,
-                    githubName: info.from_platform === "github" ? info.name : null,
-                    githubHeadImg: info.from_platform === "github" ? info.head_img : null,
-                    wechatName: info.from_platform === "wechat" ? info.name : null,
-                    wechatHeadImg: info.from_platform === "wechat" ? info.head_img : null,
-                    qqName: info.from_platform === "qq" ? info.name : null,
-                    qqHeadImg: info.from_platform === "qq" ? info.head_img : null,
-                    role: info.role,
-                    user_id: info.user_id,
-                    token: info.token
-                }
-
-                USER_INFO.isLogin = user.isLogin
-                USER_INFO.platform = user.platform
-                USER_INFO.githubName = user.githubName
-                USER_INFO.githubHeadImg = user.githubHeadImg
-                USER_INFO.wechatName = user.wechatName
-                USER_INFO.wechatHeadImg = user.wechatHeadImg
-                USER_INFO.qqName = user.qqName
-                USER_INFO.qqHeadImg = user.qqHeadImg
-                USER_INFO.role = user.role
-                USER_INFO.token = info.token
-
-                USER_INFO.user_id = user.user_id
-                authWindow.webContents.session.clearStorageData()
-                win.webContents.send("fetch-signin-token", user)
-                win.webContents.send("fetch-signin-data", {ok: true, info: "登录成功"})
-                setTimeout(() => authWindow.close(), 200)
-            })
-            .catch((err) => {
-                authWindow.webContents.session.clearStorageData()
-                win.webContents.send("fetch-signin-data", {ok: false, info: "登录错误:" + err})
-                authWindow.close()
-            })
-    })
-
-    authWindow.on("close", () => {
-        authWindow.webContents.session.clearStorageData()
-        authWindow = null
-    })
-})
-ipcMain.on("user-sign-out", (event) => {
-    USER_INFO.isLogin = false
-    USER_INFO.platform = null
-    USER_INFO.githubName = null
-    USER_INFO.githubHeadImg = null
-    USER_INFO.wechatName = null
-    USER_INFO.wechatHeadImg = null
-    USER_INFO.qqName = null
-    USER_INFO.qqHeadImg = null
-    USER_INFO.role = null
-    USER_INFO.token = null
-    USER_INFO.user_id = ""
-    win.webContents.send("login-out")
-})
-
-ipcMain.on("sync-update-user", (event, user) => {
-    USER_INFO.isLogin = user.isLogin
-    USER_INFO.platform = user.platform
-    USER_INFO.githubName = user.githubName
-    USER_INFO.githubHeadImg = user.githubHeadImg
-    USER_INFO.wechatName = user.wechatName
-    USER_INFO.wechatHeadImg = user.wechatHeadImg
-    USER_INFO.qqName = user.qqName
-    USER_INFO.qqHeadImg = user.qqHeadImg
-    USER_INFO.role = user.role
-    USER_INFO.token = user.token
-    USER_INFO.user_id = user.user_id
-    event.returnValue = user
 })

@@ -7,13 +7,14 @@ import {
 import {ExecResult} from "../pages/invoker/schema"
 import {StatusCardInfoProps, StatusCardProps} from "../pages/yakitStore/viewers/base"
 import {writeExecResultXTerm} from "../utils/xtermUtils"
-import {failed, info} from "../utils/notification"
+import {failed, info, yakitInfo} from "../utils/notification"
 import {useGetState} from "ahooks"
 import {Risk} from "@/pages/risks/schema";
+import {isEnpriTraceAgent} from "@/utils/envfile"
 
 const {ipcRenderer} = window.require("electron")
 
-interface InfoState {
+export interface InfoState {
     messageState: ExecResultLog[]
     processState: ExecResultProgress[]
     statusState: StatusCardInfoProps[]
@@ -35,7 +36,8 @@ export default function useHoldingIPCRStream(
     token: string,
     onEnd?: () => any,
     onListened?: () => any,
-    dataFilter?: (obj: ExecResultMessage, content: ExecResultLog) => boolean
+    dataFilter?: (obj: ExecResultMessage, content: ExecResultLog) => boolean,
+    onRuntimeId?: (runtimeId: string) => any
 ) {
     const [infoState, setInfoState] = useState<InfoState>({
         messageState: [],
@@ -124,7 +126,15 @@ export default function useHoldingIPCRStream(
             }
         }
 
+        let runtimeId = "";
         ipcRenderer.on(`${token}-data`, async (e: any, data: ExecResult) => {
+            if (runtimeId === "" && !!(data?.RuntimeID) && runtimeId != data.RuntimeID) {
+                runtimeId = data.RuntimeID;
+                if (onRuntimeId) {
+                    onRuntimeId(runtimeId);
+                }
+            }
+
             if (data.IsMessage) {
                 try {
                     let obj: ExecResultMessage = JSON.parse(
@@ -189,6 +199,7 @@ export default function useHoldingIPCRStream(
                         try {
                             const risk = JSON.parse(logData.data) as Risk
                             riskMessages.current.unshift(risk)
+                            if (isEnpriTraceAgent()) riskMessages.current = riskMessages.current.slice(0,10)
                         } catch (e) {
                         }
                     }
@@ -248,5 +259,22 @@ export default function useHoldingIPCRStream(
         })
     }
 
-    return [infoState, {reset, setXtermRef}, xtermRef] as const
+    const resetAll = () => {
+        messages.current = []
+        featureMessages.current = []
+        featureTypes.current = []
+        processKVPair.current = new Map<string, number>()
+        statusKVPair.current = new Map<string, CacheStatusCardProps>()
+        riskMessages.current = []
+        setInfoState({
+            messageState: [],
+            processState: [],
+            statusState: [],
+            riskState: [],
+            featureMessageState: [],
+            featureTypeState: []
+        })
+    }
+
+    return [infoState, {reset, setXtermRef,resetAll}, xtermRef] as const
 }

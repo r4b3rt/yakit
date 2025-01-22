@@ -1,98 +1,127 @@
-import React, {useEffect, useState} from "react";
-import {Button, Card, Form, Input, List, notification, PageHeader, Popconfirm, Space, Spin, Tabs, Tag} from "antd";
-import {randomString} from "../../utils/randomUtil";
-import {failed, info, warn} from "../../utils/notification";
-import {showDrawer} from "../../utils/showModal";
-import {YakEditor, IMonacoEditor} from "../../utils/editors";
-import {ManySelectOne, SelectOne} from "../../utils/inputUtil";
-import {encodeOperators, FuzzOperatorItem, fuzzOperators} from "./fuzzerTemplates";
-import {Typography} from "antd";
+import React, {useEffect, useState} from "react"
+import {YakitButton} from "@/components/yakitUI/YakitButton/YakitButton"
+import {YakitInput} from "@/components/yakitUI/YakitInput/YakitInput"
+import {OutlineSearchIcon} from "@/assets/icon/outline"
+import {YakitPopover} from "@/components/yakitUI/YakitPopover/YakitPopover"
+import {YakitEditor} from "@/components/yakitUI/YakitEditor/YakitEditor"
+import {YakitPopconfirm} from "@/components/yakitUI/YakitPopconfirm/YakitPopconfirm"
+import {useDebounceEffect, useMemoizedFn} from "ahooks"
+import {yakitNotify} from "@/utils/notification"
+import {randomString} from "@/utils/randomUtil"
+import {YakitSpin} from "@/components/yakitUI/YakitSpin/YakitSpin"
+import {showYakitDrawer} from "@/components/yakitUI/YakitDrawer/YakitDrawer"
+import {CopyComponents, YakitTag} from "@/components/yakitUI/YakitTag/YakitTag"
+import {List} from "antd"
+import {getRemoteValue, setRemoteValue} from "@/utils/kv"
+import {FUZZER_LABEL_LIST_NUMBER} from "./HTTPFuzzerEditorMenu"
+import {v4 as uuidv4} from "uuid"
+import {YakitEmpty} from "@/components/yakitUI/YakitEmpty/YakitEmpty"
+import {IMonacoEditor} from "@/utils/editors"
+import styles from "./StringFuzzer.module.scss"
 
-const {Text} = Typography;
-const {ipcRenderer} = window.require("electron");
-
-export interface StringFuzzerProp {
-    advanced?: boolean
-    disableBasicMode?: boolean
-    insertCallback?: (s: string) => any
+const {ipcRenderer} = window.require("electron")
+export interface QueryFuzzerLabelResponseProps {
+    Id: number
+    Label: string
+    Description: string
+    DefaultDescription: string
+    Hash: string
 }
 
-export const StringFuzzer: React.FC<StringFuzzerProp> = (props) => {
-    const [template, setTemplate] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [random, _] = useState(randomString(20));
-    const token = `client-string-fuzzer-${random}`;
+interface FuzztagArgumentType {
+    Name: string
+    DefaultValue: string
+    Description: string
+    IsOptional: boolean
+    IsList: boolean
+    Separators: string[]
+}
+interface FuzztagInfo {
+    Name: string
+    Description: string
+    VerboseName: string
+    Examples: string[]
+    ArgumentTypes: FuzztagArgumentType[]
+}
+interface GetAllFuzztagInfoResponse {
+    Data: FuzztagInfo[]
+}
+interface Range {
+    Code: string
+    StartLine: number
+    StartColumn: number
+    EndLine: number
+    EndColumn: number
+}
+interface GenerateFuzztagRequest {
+    Name: string
+    Type: "insert" | "wrap"
+    Range: Range
+}
+interface StringFuzzerProps {
+    insertCallback?: (s: string) => void
+    close?: () => void
+}
 
-    // 高级配置选项
-    const [advanced, setAdvanced] = useState(props.advanced ? "advanced" : "ordinary");
-    const [buildTemp, setBuildTemp] = useState<string>();
-    const [encodeTemp, setEncodeTemp] = useState<string>();
+export const StringFuzzer: React.FC<StringFuzzerProps> = (props) => {
+    const {insertCallback, close} = props
+    const [templateEditor, setTemplateEditor] = useState<IMonacoEditor>()
+    const [template, setTemplate] = useState<string>("")
+    const [loading, setLoading] = useState(false)
+    const [random, _] = useState(randomString(20))
+    const token = `client-string-fuzzer-${random}`
+    const [fuzztagList, setFuzztagList] = useState<FuzztagInfo[]>([])
+    const [renderList, setRenderList] = useState<FuzztagInfo[]>([])
+    const [searchVal, setSearchVal] = useState<string>("")
 
-    const getCurrentEncodeTemplate = () => {
-        const res = encodeOperators.filter(i => i.name === encodeTemp);
-        if (res.length > 0 && res[0]) {
-            return res[0];
-        }
-        return false
-    };
-
-    const getCurrentBuildTemplate = () => {
-        const res = fuzzOperators.filter(i => i.name === buildTemp);
-        if (res.length > 0 && res[0]) {
-            return res[0];
-        }
-        return false
-    };
-
-    useEffect(() => {
-        const temp = getCurrentEncodeTemplate();
-        if (temp && template && !template.includes(`{{${temp.tag}(`)) {
-            setEncodeTemp(undefined)
-        }
-
+    const onSubmit = useMemoizedFn(() => {
         if (!template) {
-            setBuildTemp(undefined)
-        }
-    }, [template])
-
-    useEffect(() => {
-        if (!random) {
+            yakitNotify("warning", "Fuzz模版为空")
             return
         }
+        setLoading(true)
+        ipcRenderer.invoke("string-fuzzer", {template, token})
+    })
 
-        ipcRenderer.on(token, (e, data: { error: any, data: { Results: string[] } }) => {
+    useEffect(() => {
+        if (!random) return
+        ipcRenderer.on(token, (e, data: {error: any; data: {Results: string[]}}) => {
             if (data.error) {
-                failed(((data.error?.details) || data.error?.detail) || "未知错误")
+                yakitNotify("error", data.error?.details || data.error?.detail || "未知错误")
                 return
             }
-            const {Results} = data.data;
-            let m = showDrawer({
-                content: <div style={{height: "100%", overflow: "auto"}}>
-                    <PageHeader title={"Payload 测试结果"}>
-
-                    </PageHeader>
-                    <div style={{height: "80%"}}>
-                        <List
-                            size={"small"} dataSource={Results}
-                            pagination={{
-                                pageSize: 15, showTotal: r => {
-                                    return <Tag>总量:{r}</Tag>
-                                }, size: "small",
-                            }} bordered={true}
-                            renderItem={e => {
-                                return <List.Item>
-                                    <Text
-                                        copyable={true}
-                                        // ellipsis={{tooltip: true}}
-                                        // style={{width: 300}}
-                                    >{e}</Text>
-                                </List.Item>
-                            }}>
-
-                        </List>
+            const {Results} = data.data
+            showYakitDrawer({
+                title: "Payload 测试结果",
+                content: (
+                    <div style={{height: "100%", overflow: "auto"}}>
+                        <div style={{height: "80%"}}>
+                            <List
+                                className='yakit-list yakit-list-bordered'
+                                size={"small"}
+                                dataSource={Results}
+                                pagination={{
+                                    pageSize: 15,
+                                    showTotal: (r) => {
+                                        return <YakitTag>总量:{r}</YakitTag>
+                                    },
+                                    size: "small"
+                                }}
+                                bordered={true}
+                                renderItem={(e) => {
+                                    return (
+                                        <List.Item>
+                                            <span className='content-ellipsis'>{e}</span>
+                                            <CopyComponents copyText={e} />
+                                        </List.Item>
+                                    )
+                                }}
+                            ></List>
+                        </div>
                     </div>
-                </div>,
-                width: "35%", mask: true,
+                ),
+                width: "35%",
+                mask: true
             })
             setLoading(false)
         })
@@ -101,195 +130,249 @@ export const StringFuzzer: React.FC<StringFuzzerProp> = (props) => {
         }
     }, [random])
 
-    const removeEncodeTemplateTag = () => {
-        const res = encodeOperators.filter(i => i.name === encodeTemp);
-        if (res.length > 0 && res[0] && template) {
-            const item = res[0];
-            let newTemp = template.replace(`{{${item.tag}(`, "");
-            const index = newTemp.lastIndexOf(")}}");
-            if (index >= 0 && newTemp.length >= (index + 3)) {
-                newTemp = newTemp.substr(0, index) + newTemp.substr(index + 3)
-                setTemplate(newTemp)
-            } else {
-                warn("移除编码标签失败（标签结构已被破坏，请重构）")
-            }
-        } else {
-            warn("移除编码标签失败: 找不到标签内容（标签类型）")
-        }
-        setEncodeTemp(undefined)
-    };
-
-    const removeBuildTemplateTag = () => {
-        const t = getCurrentBuildTemplate()
-        if (t && template) {
-            if (!t.tag) {
-                warn("不支持移除带参数的基础标签");
-                setBuildTemp(undefined)
-                return
-            }
-            let newTemp = template.replace(`{{${t.tag}`, "");
-            const index = newTemp.lastIndexOf("}}");
-            if (index >= 0 && newTemp.length >= (index + 2)) {
-                newTemp = newTemp.substr(0, index) + newTemp.substr(index + 2)
-                setTemplate(newTemp)
-            } else {
-                warn("移除基础标签失败（标签结构已被破坏，请重构）")
-            }
-        } else {
-            warn("移除基础标签失败，空 Payload 或找不到标签数据")
-        }
-        setBuildTemp(undefined)
-    }
-
-    const submit = () => {
+    const addToCommonTag = useMemoizedFn(() => {
         if (!template) {
-            notification["warning"]({message: "Fuzz模版为空"})
+            yakitNotify("warning", "Fuzz模版为空")
             return
         }
+        getRemoteValue(FUZZER_LABEL_LIST_NUMBER).then((data) => {
+            if (!data) {
+                return
+            }
+            const count: number = JSON.parse(data).number
+            ipcRenderer
+                .invoke("SaveFuzzerLabel", {
+                    Data: [
+                        {
+                            Label: template,
+                            Description: `标签${count + 1}`,
+                            DefaultDescription: `${uuidv4()}`
+                        }
+                    ]
+                })
+                .then(() => {
+                    setRemoteValue(FUZZER_LABEL_LIST_NUMBER, JSON.stringify({number: count + 1}))
+                    close && close()
+                    yakitNotify("success", "标签添加成功")
+                })
+                .catch((err) => {
+                    yakitNotify("error", err + "")
+                })
+        })
+    })
 
-        setLoading(true)
-        ipcRenderer.invoke("string-fuzzer", {template, token})
+    useEffect(() => {
+        ipcRenderer
+            .invoke("GetAllFuzztagInfo", {Key: ""})
+            .then((res: GetAllFuzztagInfoResponse) => {
+                setFuzztagList(res.Data || [])
+                setRenderList(res.Data || [])
+            })
+            .catch((err) => {
+                yakitNotify("error", err + "")
+            })
+    }, [])
+
+    useDebounceEffect(
+        () => {
+            const list = fuzztagList.filter((item) =>
+                (item.Name + item.VerboseName + item.Description)
+                    .toLocaleLowerCase()
+                    .includes(searchVal.toLocaleLowerCase())
+            )
+            setRenderList(list)
+        },
+        [searchVal],
+        {wait: 300}
+    )
+
+    const generateFuzztag = (type: "insert" | "wrap", tagItem: FuzztagInfo) => {
+        const range = getSelection(type)
+        if (range === undefined) return
+        const params: GenerateFuzztagRequest = {
+            Type: type,
+            Name: tagItem.Name,
+            Range: range
+        }
+        ipcRenderer
+            .invoke("GenerateFuzztag", params)
+            .then((res) => {
+                if (res.Status.Ok) {
+                    setTemplate(res.Result)
+                }
+            })
+            .catch((err) => {
+                yakitNotify("error", err + "")
+            })
+    }
+    const getSelection = (type) => {
+        const model = templateEditor?.getModel()
+        if (model) {
+            const selection = templateEditor?.getSelection()
+            if (selection && !selection.isEmpty()) {
+                return {
+                    Code: template,
+                    StartLine: selection.startLineNumber,
+                    StartColumn: selection.startColumn,
+                    EndLine: selection.endLineNumber,
+                    EndColumn: selection.endColumn
+                }
+            } else {
+                // 如果没有选中内容
+                const position = templateEditor?.getPosition()
+                if (position) {
+                    if (type === "wrap") {
+                        return {
+                            Code: template,
+                            StartLine: position.lineNumber,
+                            StartColumn: 1,
+                            EndLine: position.lineNumber,
+                            EndColumn: position.column
+                        }
+                    } else {
+                        return {
+                            Code: template,
+                            StartLine: position.lineNumber,
+                            StartColumn: position.column,
+                            EndLine: position.lineNumber,
+                            EndColumn: position.column
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    return <Spin spinning={loading}>
-        <PageHeader title={"Fuzzer Tag 调试工具"}>
-
-        </PageHeader>
-        <Tabs defaultActiveKey={advanced}>
-            <Tabs.TabPane tab={"简易模式"} key={"ordinary"} disabled={props.disableBasicMode}>
-                <PageHeader title={<div style={{fontSize: 14}}>
-                    简易模式适合复制 Fuzz 过后的 Payload 来查看结果
-                </div>}/>
-                <Form
-                    onSubmitCapture={e => {
-                        e.preventDefault()
-                        submit()
-                    }}
-                    labelCol={{span: 7}} wrapperCol={{span: 15}}
-                >
-                    <Form.Item label={"Fuzz模版"}>
-                        <Input placeholder={"{{randstr}}"} value={template}
-                               onChange={e => setTemplate(e.target.value)}/>
-                    </Form.Item>
-                    <Form.Item label={" "} colon={false}>
-                        <Space>
-                            <Button type={"primary"} htmlType={"submit"}>
-                                查看 Fuzz 结果
-                            </Button>
-                        </Space>
-                    </Form.Item>
-                </Form>
-            </Tabs.TabPane>
-            <Tabs.TabPane key={"advanced"} tab={"调试模式"}>
-                <PageHeader title={"调试模式"} subTitle={"调试模式适合生成或者修改 Payload，在调试完成后，可以在 Web Fuzzer 中使用"}/>
-                <Space direction={"vertical"} style={{width: "100%"}} size={24}>
-                    <div style={{height: 120}}>
-                        <YakEditor type={"http"}
-                                   value={template} readOnly={false} setValue={setTemplate}/>
+    return (
+        <YakitSpin spinning={loading}>
+            <div className={styles["stringFuzzer"]}>
+                <div className={styles["stringFuzzer-left"]}>
+                    <div className={styles["stringFuzzer-search"]}>
+                        <YakitInput
+                            allowClear
+                            prefix={<OutlineSearchIcon className={styles["search-icon"]} />}
+                            value={searchVal}
+                            onChange={(e) => setSearchVal(e.target.value)}
+                        ></YakitInput>
                     </div>
-                    <Form layout={"horizontal"} onSubmitCapture={e => {
-                        e.preventDefault()
-                        submit()
-                    }} labelCol={{span: 7}} wrapperCol={{span: 14}}>
-                        <ManySelectOne
-                            label={`选择基础 Fuzz 标签`}
-                            value={buildTemp}
-                            data={fuzzOperators.map(i => {
-                                return {value: i.name, text: i.name}
-                            })}
-                            setValue={r => {
-                                setBuildTemp(r)
-                                setEncodeTemp(undefined)
-                            }}
-                        >
-
-                        </ManySelectOne>
-                        {buildTemp && <Form.Item label={" "} colon={false}>
-                            <Card bordered={true} title={"基础标签"} size={"small"} extra={[
-                                <Button
-                                    danger={true}
-                                    onClick={() => {
-                                        removeBuildTemplateTag()
-                                    }}
-                                >移除编码标签</Button>
-                            ]}>
-                                {(() => {
-                                    if (!buildTemp) {
-                                        return
-                                    }
-                                    const res = fuzzOperators.filter(i => i.name === buildTemp);
-                                    // @ts-ignore
-                                    if (res.length > 0 && res[0].optionsRender) {
-                                        return res[0].optionsRender(template, setTemplate)
-                                    }
-                                })()}
-                            </Card>
-                        </Form.Item>}
-                        <ManySelectOne
-                            disabled={!!encodeTemp}
-                            label={"Payload 编码 / 编码标签"}
-                            value={encodeTemp}
-                            setValue={e => {
-                                setEncodeTemp(e)
-                            }}
-                            data={encodeOperators.map(i => {
-                                return {value: i.name, text: i.name}
-                            })}
-                        >
-
-                        </ManySelectOne>
-                        {/* {encodeTemp && <Form.Item
-                            label={" "} colon={false}
-                            help={"本标签一般负责对 Payload 进行编码等处理，可以嵌套在一个普通(基础)标签外部"}
-                        >
-                            <Card bordered={true} title={"编码标签"} size={"small"} extra={[
-                                <Button
-                                    danger={true}
-                                    onClick={() => {
-                                        removeEncodeTemplateTag()
-                                    }}
-                                >移除编码标签</Button>
-                            ]}>
-                                {(() => {
-                                    if (!encodeTemp) {
-                                        return
-                                    }
-
-                                    const res = encodeOperators.filter(i => i.name === encodeTemp);
-                                    // @ts-ignore
-                                    if (res.length > 0 && res[0].optionsRender) {
-                                        return res[0].optionsRender(template, setTemplate)
-                                    }
-                                })()}
-                            </Card>
-                        </Form.Item>} */}
-                        <Form.Item label={" "} colon={false}>
-                            <Space>
-                                <Button htmlType={"submit"}>查看生成后的 Payload</Button>
-                                {props.insertCallback && <Button
-                                    type={"primary"}
-                                    onClick={() => {
-                                        if (props.insertCallback) {
-                                            props.insertCallback(template)
-
+                    <div className={styles["stringFuzzer-list"]}>
+                        {renderList.length > 0 ? (
+                            <>
+                                {renderList.map((item) => (
+                                    <YakitPopover
+                                        placement='rightTop'
+                                        overlayClassName={styles["stringFuzzer-popover"]}
+                                        content={
+                                            <div className={styles["stringFuzzer-popover-cont"]}>
+                                                <div className={styles["stringFuzzer-popover-cont-name"]}>
+                                                    {item.VerboseName}
+                                                </div>
+                                                <div className={styles["stringFuzzer-popover-cont-Egname"]}>
+                                                    {item.Name}
+                                                </div>
+                                                <div className={styles["stringFuzzer-popover-cont-desc"]}>
+                                                    描述：{item.Description}
+                                                </div>
+                                                <div className={styles["stringFuzzer-popover-cont-example"]}>
+                                                    示例：{item.Examples.join(", ")}
+                                                </div>
+                                                {item.ArgumentTypes.length > 0 && (
+                                                    <>
+                                                        <div>参数类型信息：</div>
+                                                        <table border={1} width='100%' cellPadding={8}>
+                                                            <tr>
+                                                                <th>参数名</th>
+                                                                <th>默认值</th>
+                                                                <th>描述</th>
+                                                                <th>可选参数</th>
+                                                                <th>数组参数</th>
+                                                                <th>分隔符</th>
+                                                            </tr>
+                                                            {item.ArgumentTypes.map((argItem) => (
+                                                                <tr key={argItem.Name}>
+                                                                    <td>{argItem.Name}</td>
+                                                                    <td>{argItem.DefaultValue}</td>
+                                                                    <td>{argItem.Description}</td>
+                                                                    <td>{argItem.IsOptional + ""}</td>
+                                                                    <td>{argItem.IsList + ""}</td>
+                                                                    <td>{argItem.Separators}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </table>
+                                                    </>
+                                                )}
+                                            </div>
                                         }
-                                    }}
-                                >插入标签所在位置</Button>}
-                                <Popconfirm
-                                    title={"确认要重置你的 Payload 吗？"}
-                                    onConfirm={() => {
-                                        setBuildTemp("")
-                                        setEncodeTemp("")
-                                        setTemplate("")
-                                    }}
-                                >
-                                    <Button>重置</Button>
-                                </Popconfirm>
-                            </Space>
-                        </Form.Item>
-                    </Form>
-                </Space>
-            </Tabs.TabPane>
-        </Tabs>
-    </Spin>
-};
+                                        key={item.VerboseName}
+                                    >
+                                        <div className={styles["stringFuzzer-list-item"]}>
+                                            <div className={styles["stringFuzzer-list-item-name"]}>
+                                                {item.VerboseName}
+                                            </div>
+                                            <div className={styles["stringFuzzer-list-item-btns"]}>
+                                                <span
+                                                    className={styles["list-opt-btn"]}
+                                                    onClick={() => generateFuzztag("wrap", item)}
+                                                >
+                                                    嵌套
+                                                </span>
+                                                <span
+                                                    className={styles["list-opt-btn"]}
+                                                    onClick={() => generateFuzztag("insert", item)}
+                                                >
+                                                    插入
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </YakitPopover>
+                                ))}
+                            </>
+                        ) : (
+                            <YakitEmpty></YakitEmpty>
+                        )}
+                    </div>
+                </div>
+                <div className={styles["stringFuzzer-right"]}>
+                    <div className={styles["stringFuzzer-right-editor"]}>
+                        <YakitEditor
+                            type={"http"}
+                            value={template}
+                            readOnly={false}
+                            setValue={setTemplate}
+                            editorDidMount={(editor, monaco) => {
+                                setTemplateEditor(editor)
+                            }}
+                        />
+                    </div>
+                    <div className={styles["stringFuzzer-right-btns"]}>
+                        <YakitButton type='outline2' onClick={onSubmit}>
+                            查看生成后的 Payload
+                        </YakitButton>
+                        {insertCallback && (
+                            <YakitButton
+                                type={"primary"}
+                                onClick={() => {
+                                    insertCallback(template)
+                                }}
+                            >
+                                插入标签所在位置
+                            </YakitButton>
+                        )}
+                        <YakitPopconfirm
+                            title={"确认要重置你的 Payload 吗？"}
+                            onConfirm={() => {
+                                setTemplate("")
+                            }}
+                            placement='top'
+                        >
+                            <YakitButton type='outline2'>重置</YakitButton>
+                        </YakitPopconfirm>
+                        <YakitButton type='outline2' onClick={addToCommonTag}>
+                            添加到常用标签
+                        </YakitButton>
+                    </div>
+                </div>
+            </div>
+        </YakitSpin>
+    )
+}

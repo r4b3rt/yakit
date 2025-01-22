@@ -1,19 +1,9 @@
-import React, {useEffect, useState} from "react";
-import {Button, Card, Col, Collapse, Divider, Empty, List, Popconfirm, Row, Space, Tabs, Tag} from "antd";
-import {EditorProps, HTTPPacketEditor, YakCodeEditor, YakEditor} from "../../utils/editors";
-import {genDefaultPagination, YakScript, YakScriptHookItem, YakScriptHooks} from "../invoker/schema";
-import {YakExecutorParam} from "../invoker/YakExecutorParams";
-import {showModal} from "../../utils/showModal";
-import {YakModuleList} from "../yakitStore/YakitStorePage";
+import React from "react";
+import {Button, Card, Col, List, Row, Space} from "antd";
+import {genDefaultPagination, YakScriptHookItem, YakScriptHooks} from "../invoker/schema";
 import {HTTPFlowMiniTable} from "../../components/HTTPFlowMiniTable";
-import {YakitLogViewers} from "../invoker/YakitLogFormatter";
-import {ExecResultLog} from "../invoker/batch/ExecMessageViewer";
-import ReactJson from "react-json-view";
-import {SelectOne} from "../../utils/inputUtil";
-import {YakScriptParamsSetter} from "../invoker/YakScriptParamsSetter";
-import "../main.scss";
-import {MITMPluginOperatorProps} from "./MITMPluginOperator";
-import {MITMPluginListProp} from "./MITMPluginList";
+import { MITMPluginListProp } from "./MITMServerHijacking/MITMPluginLocalList";
+import {YakitPopconfirm} from "@/components/yakitUI/YakitPopconfirm/YakitPopconfirm";
 
 
 export interface MITMPluginCardProp extends MITMPluginListProp {
@@ -65,7 +55,7 @@ export const YakScriptHooksViewer: React.FC<YakScriptHooksViewerProp> = (props) 
                         </Col>
                         <Col span={8}>
                             <div style={{width: "100%", textAlign: "right"}}>
-                                <Popconfirm
+                                <YakitPopconfirm
                                     title={"确定要移除该 Hook 吗？"}
                                     onConfirm={() => {
                                         ipcRenderer.invoke("mitm-remove-hook", {
@@ -78,7 +68,7 @@ export const YakScriptHooksViewer: React.FC<YakScriptHooksViewerProp> = (props) 
                                         danger={true} size={"small"}
                                         type={"link"}
                                     >移除Hook</Button>
-                                </Popconfirm>
+                                </YakitPopconfirm>
                             </div>
                         </Col>
 

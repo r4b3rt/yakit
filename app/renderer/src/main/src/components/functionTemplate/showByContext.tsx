@@ -2,6 +2,7 @@ import {CSSProperties, ReactNode} from "react"
 import ReactDOM from "react-dom"
 import {coordinate} from "../../pages/globalVariable"
 import {BaseMenu, BaseMenuProps} from "../baseTemplate/BaseMenu"
+import {createRoot} from "react-dom/client"
 import "./showByContext.css"
 
 const ContextMenuId = "yakit-cursor-menu"
@@ -16,11 +17,12 @@ export const showByContextMenu = (props: BaseMenuProps, x?: number, y?: number) 
     div.id = ContextMenuId
     div.className = "popup"
     document.body.appendChild(div)
+    /**ContextMenu 根节点 */
+    let contextMenuRootDiv
 
     const destory = () => {
-        const unmountResult = ReactDOM.unmountComponentAtNode(div)
-        if (unmountResult && div.parentNode) {
-            div.parentNode.removeChild(div)
+        if (contextMenuRootDiv) {
+            contextMenuRootDiv.unmount()
         }
     }
 
@@ -30,52 +32,21 @@ export const showByContextMenu = (props: BaseMenuProps, x?: number, y?: number) 
                 destory()
                 document.removeEventListener("click", onClickOutsize)
             })
-            if ((props.data || []).length > 0)
-                ReactDOM.render(
+            document.addEventListener("contextmenu", function onContextMenuOutsize() {
+                destory()
+                document.removeEventListener("contextmenu", onContextMenuOutsize)
+            })
+            if ((props.data || []).length > 0) {
+                contextMenuRootDiv = createRoot(div)
+                contextMenuRootDiv.render(
                     <BaseMenu
                         className='right-context-menu'
                         data={data || []}
                         {...restMenu}
                         onClick={onClick}
-                    ></BaseMenu>,
-                    div
+                    ></BaseMenu>
                 )
-        })
-    }
-    render()
-
-    return {destroy: destory}
-}
-
-const FullScreenMask = "full-screen-mask"
-export const showFullScreenMask = (
-    content: ReactNode,
-    maskClassName?: string,
-    maskStyle?: CSSProperties,
-    onCancel?: (e: MouseEvent) => any
-) => {
-    const fullScreenDiv = document.getElementById(FullScreenMask)
-    const div: HTMLDivElement = fullScreenDiv ? (fullScreenDiv as HTMLDivElement) : document.createElement("div")
-    if (onCancel) div.onclick = (e) => onCancel(e)
-    div.id = FullScreenMask
-    div.className = FullScreenMask
-    document.body.appendChild(div)
-
-    const destory = () => {
-        const unmountResult = ReactDOM.unmountComponentAtNode(div)
-        if (unmountResult && div.parentNode) {
-            div.parentNode.removeChild(div)
-        }
-    }
-
-    const render = () => {
-        setTimeout(() => {
-            ReactDOM.render(
-                <div className={maskClassName || ""} style={maskStyle || undefined}>
-                    {content}
-                </div>,
-                div
-            )
+            }
         })
     }
     render()

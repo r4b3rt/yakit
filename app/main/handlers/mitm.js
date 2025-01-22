@@ -1,4 +1,4 @@
-const {ipcMain} = require("electron");
+const { ipcMain } = require("electron");
 const DNS = require("dns");
 
 
@@ -39,7 +39,7 @@ module.exports = (win, getClient) => {
     //
     ipcMain.handle("mitm-auto-forward", (e, value) => {
         if (stream) {
-            stream.write({setAutoForward: true, autoForwardValue: value})
+            stream.write({ setAutoForward: true, autoForwardValue: value })
         }
     })
 
@@ -84,14 +84,22 @@ module.exports = (win, getClient) => {
     })
 
     // 发送劫持请当前请求的消息，可以劫持当前响应的请求
-    ipcMain.handle("mitm-hijacked-current-response", (e, id) => {
+    ipcMain.handle("mitm-hijacked-current-response", (e, id, should) => {
         if (stream) {
-            stream.write({
-                id: id,
-                hijackResponse: true
-            })
+            if (should) {
+                stream.write({
+                    id: id,
+                    hijackResponse: true,
+                })
+            } else {
+                stream.write({
+                    id: id,
+                    cancelhijackResponse: true,
+                })
+            }
         }
     })
+
 
     ipcMain.handle("mitm-enable-plugin-mode", (e, initPluginNames) => {
         if (stream) {
@@ -111,11 +119,14 @@ module.exports = (win, getClient) => {
     })
 
     // MITM 转发
-    ipcMain.handle("mitm-forward-modified-request", (e, request, id) => {
+    ipcMain.handle("mitm-forward-modified-request", (e, request, id, tags, autoForwardValue) => {
         if (stream) {
             stream.write({
                 id,
                 request: Buffer.from(request),
+                Tags: tags,
+                setAutoForward: true,
+                autoForwardValue: autoForwardValue
             })
         }
     })
@@ -179,7 +190,7 @@ module.exports = (win, getClient) => {
     // 设置正则替换
     ipcMain.handle("mitm-content-replacers", (e, filter) => {
         if (stream) {
-            stream.write({...filter, setContentReplacers: true})
+            stream.write({ ...filter, setContentReplacers: true })
         }
     })
 
@@ -192,9 +203,39 @@ module.exports = (win, getClient) => {
         }
     })
 
+    // 过滤 ws
+    ipcMain.handle("mitm-filter-websocket", (e, filterWebsocket) => {
+        if (stream) {
+            stream.write({
+                filterWebsocket,
+                updateFilterWebsocket: true
+            })
+        }
+    })
+
+    // 下游代理
+    ipcMain.handle("mitm-set-downstream-proxy", (e, downstreamProxy) => {
+        if (stream) {
+            stream.write({
+                SetDownstreamProxy: true,
+                downstreamProxy
+            })
+        }
+    })
+
+    // host port
+    ipcMain.handle("mitm-host-port", (e, host, port) => {
+        if (stream) {
+            stream.write({
+                host,
+                port,
+            })
+        }
+    })
+
     // 开始调用 MITM，设置 stream
     let isFirstData = true
-    ipcMain.handle("mitm-start-call", (e, host, port, downstreamProxy) => {
+    ipcMain.handle("mitm-start-call", (e, host, port, downstreamProxy, enableHttp2, ForceDisableKeepAlive, certificates, extra) => {
         if (stream) {
             if (win) {
                 win.webContents.send("client-mitm-start-success")
@@ -204,7 +245,6 @@ module.exports = (win, getClient) => {
 
         isFirstData = true;
         stream = getClient().MITM();
-
         // 设置服务器发回的消息的回调函数
         stream.on("data", data => {
             // 处理第一个消息
@@ -255,10 +295,11 @@ module.exports = (win, getClient) => {
             // 把劫持到的信息发送回前端
             if (win) {
                 if (data.justFilter) {
-                    win.webContents.send("client-mitm-filter", {...data})
+                    win.webContents.send("client-mitm-filter", { ...data })
                     return
                 }
-                win.webContents.send("client-mitm-hijacked", {...data})
+                if (data.id == "0" && data.responseId == "0") return
+                win.webContents.send("client-mitm-hijacked", { ...data })
             }
         })
         stream.on("error", (err) => {
@@ -275,7 +316,9 @@ module.exports = (win, getClient) => {
             }
         })
         stream.on("end", () => {
-            stream.cancel()
+            if (stream) {
+                stream.cancel()
+            }
             stream = undefined
         })
         currentHost = host
@@ -284,6 +327,10 @@ module.exports = (win, getClient) => {
         if (stream) {
             stream.write({
                 host, port, downstreamProxy,
+                enableHttp2, ForceDisableKeepAlive, certificates,
+                ...extra,
+                DisableCACertPage: extra.disableCACertPage,
+                DisableWebsocketCompression: !extra.DisableWebsocketCompression
             })
         }
     })
@@ -295,21 +342,36 @@ module.exports = (win, getClient) => {
         }
     })
 
-    const asyncFetchHostIp = (params) => {
+    // const asyncFetchHostIp = (params) => {
+    //     return new Promise((resolve, reject) => {
+    //         DNS.lookup(params, function (err, address) {
+    //             if (err) {
+    //                 reject(err)
+    //                 return
+    //             }
+    //             resolve(address)
+    //         });
+    //     })
+    // }
+    // 获取URL的IP地址
+    // ipcMain.handle("fetch-url-ip", async (e, params) => {
+    //     return await asyncFetchHostIp(params)
+    // })
+
+    // 劫持前重置过滤器
+    const asyncResetMITMFilter = (params) => {
         return new Promise((resolve, reject) => {
-            DNS.lookup(params, function (err, address) {
+            getClient().ResetMITMFilter(params, (err, data) => {
                 if (err) {
                     reject(err)
                     return
                 }
-                resolve(address)
-            });
+                resolve(data)
+            })
         })
     }
-
-    // 获取URL的IP地址
-    ipcMain.handle("fetch-url-ip", async (e, params) => {
-        return await asyncFetchHostIp(params)
+    ipcMain.handle("ResetMITMFilter", async (e, params) => {
+        return await asyncResetMITMFilter(params)
     })
 
     // asyncDownloadMITMCert wrapper
@@ -390,5 +452,95 @@ module.exports = (win, getClient) => {
     }
     ipcMain.handle("SetCurrentRules", async (e, params) => {
         return await asyncSetCurrentRules(params)
+    })
+
+    // 设置mitm filter
+    const asyncSetMITMFilter = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().SetMITMFilter(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+
+                resolve(data)
+            })
+        })
+    }
+
+    ipcMain.handle("mitm-set-filter", async (e, params) => {
+        if (stream) {
+            stream.write({ ...params, updateFilter: true })
+        }
+        return await asyncSetMITMFilter(params)
+    })
+    // 获取mitm filter
+    const asyncGetMITMFilter = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().GetMITMFilter(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("mitm-get-filter", async (e, params) => {
+        return await asyncGetMITMFilter(params)
+    })
+
+    // 设置mitm Hijack filter
+    const asyncSetMITMHijackFilter = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().SetMITMHijackFilter(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("mitm-hijack-set-filter", async (e, params) => {
+        if (stream) {
+            stream.write({ HijackFilterData: params.FilterData, updateHijackFilter: true })
+        }
+        return await asyncSetMITMHijackFilter(params)
+    })
+    // 获取mitm Hijack filter
+    const asyncGetMITMHijackFilter = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().GetMITMHijackFilter(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("mitm-hijack-get-filter", async (e, params) => {
+        return await asyncGetMITMHijackFilter(params)
+    })
+
+    // 代理劫持
+    const asyncGenerateURL = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().GenerateURL(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("mitm-agent-hijacking-config", async (e, params) => {
+        return await asyncGenerateURL(params)
     })
 }
