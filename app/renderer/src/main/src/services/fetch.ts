@@ -1,8 +1,8 @@
-import {UserInfoProps, useStore} from "@/store"
-import {setRemoteValue} from "@/utils/kv"
-import {loginOut, loginOutLocal} from "@/utils/login"
+import {UserInfoProps} from "@/store"
+import {loginOutLocal} from "@/utils/login"
 import {failed} from "@/utils/notification"
 import {AxiosRequestConfig, AxiosResponse} from "./axios"
+import {globalUserLogout} from "@/utils/envfile"
 
 const {ipcRenderer} = window.require("electron")
 
@@ -23,8 +23,10 @@ type AxiosResponseProps<T = any, D = any> = Merge<
     }
 >
 
-interface requestConfig<T = any> extends AxiosRequestConfig<T> {
+export interface requestConfig<T = any> extends AxiosRequestConfig<T> {
     params?: T
+    /** @name 自定义接口域名 */
+    diyHome?: string
 }
 
 export function NetWorkApi<T, D>(params: requestConfig<T>): Promise<D> {
@@ -33,6 +35,11 @@ export function NetWorkApi<T, D>(params: requestConfig<T>): Promise<D> {
         ipcRenderer
             .invoke("axios-api", params)
             .then((res) => {
+                // 埋点接口 不论结果如何 不可影响页面及交互
+                if (params.url === "tourist" && params.method === "POST") {
+                    resolve("" as any)
+                    return
+                }
                 handleAxios(res, resolve, reject)
             })
             .catch((err: any) => {
@@ -47,6 +54,7 @@ export const handleAxios = (res: AxiosResponseProps<AxiosResponseInfoProps>, res
     // console.log("返回", res)
     if (!code) {
         failed("请求超时，请重试")
+        reject("请求超时，请重试")
         return
     }
     switch (code) {
@@ -58,6 +66,7 @@ export const handleAxios = (res: AxiosResponseProps<AxiosResponseInfoProps>, res
             break
         case 401:
             tokenOverdue(res)
+            reject(message)
             break
         default:
             reject(message)
@@ -66,8 +75,10 @@ export const handleAxios = (res: AxiosResponseProps<AxiosResponseInfoProps>, res
 }
 
 // token过期，退出
-const tokenOverdue = (res) => {
+export const tokenOverdue = (res) => {
     if (res.userInfo) loginOutLocal(res.userInfo)
-    setRemoteValue("token-online", "")
+    // 异常过期 无法通过接口更新连接状态 故只作退出远程处理
+    ipcRenderer.invoke("lougin-out-dynamic-control", {loginOut: false})
+    globalUserLogout()
     failed("401,登录过期/未登录，请重新登录")
 }

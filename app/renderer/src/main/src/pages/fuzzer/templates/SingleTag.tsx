@@ -1,41 +1,22 @@
-import React, {useEffect, useState} from "react";
-import {RandStrWithLenProp} from "./Rand";
-import {Form, Typography} from "antd";
+import React, {useEffect, useState} from "react"
+import {RandStrWithLenProp} from "./Rand"
+import {Form, Typography} from "antd"
 
-const {Text} = Typography;
+const {Text} = Typography
 
 export interface SingleTagProp extends RandStrWithLenProp {
     tag: string
     help: string
+    enableInput?: boolean
+    defaultInput?: string
+    label?: string
+    exampleInput?: string
 }
 
-export const SingleTag: React.FC<SingleTagProp> = (props) => {
-
-    useEffect(() => {
-        let tag = `{{${props.tag}}}`;
-        if ((props.origin || "").includes(tag)) {
-            return
-        }
-        if (origin === "") {
-            tag = ""
-        }
-
-        props.setOrigin(tag)
-    }, [props])
-
-    return <>
-        {props.help && <Form.Item label={"标签介绍"}>
-            <Text mark={true}>{props.help}</Text>
-        </Form.Item>}
-    </>
-};
-
-export interface EncodeTagProp extends SingleTagProp {
-
-}
+export interface EncodeTagProp extends SingleTagProp {}
 
 export const EncodeTag: React.FC<EncodeTagProp> = (props) => {
-    const [origin, setOrigin] = useState(props.origin);
+    const [origin, setOrigin] = useState(props.origin)
 
     useEffect(() => {
         if (!origin) {
@@ -51,9 +32,13 @@ export const EncodeTag: React.FC<EncodeTagProp> = (props) => {
         setOrigin(props.origin)
     }, [props])
 
-    return <>
-        {props.help && <Form.Item label={"编码标签介绍"}>
-            <Text mark={true}>{props.help}</Text>
-        </Form.Item>}
-    </>
-};
+    return (
+        <>
+            {props.help && (
+                <Form.Item label={"编码标签介绍"}>
+                    <Text mark={true}>{props.help}</Text>
+                </Form.Item>
+            )}
+        </>
+    )
+}

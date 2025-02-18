@@ -1,0 +1,108 @@
+.yakit-editor-code {
+    .content-length::after {
+        content: "auto";
+        margin-left: 2px;
+        padding: 1px 4px;
+        background-color: #808080; /* 灰色背景 */
+
+        border-radius: 3px; /* 添加圆角以使样式更好看 */
+        color: #ffffff; /* 设置文字颜色为白色，以便在灰色背景上更清晰可见 */
+        opacity: 0.3;
+    }
+
+    .content-length:hover::after {
+        content: "发包时自动修复，一般无需指定";
+        background-color: #f9f9f9;
+        color: #333;
+        padding: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        opacity: 0.8;
+    }
+
+    .host::after {
+        content: "?";
+        margin-left: 2px;
+        padding: 1px 4px;
+        background-color: #808080; /* 灰色背景 */
+
+        border-radius: 3px; /* 添加圆角以使样式更好看 */
+        color: #ffffff; /* 设置文字颜色为白色，以便在灰色背景上更清晰可见 */
+        opacity: 0.3;
+    }
+
+    .host:hover::after {
+        content: '如需手动指定目标地址或 Host 碰撞，请配置"高级配置-真实Host"';
+        background-color: #f9f9f9;
+        color: #333;
+        padding: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        opacity: 0.8;
+    }
+
+    .unicode-decode {
+        background-color: rgba(173, 216, 230, 0.5);
+    }
+
+    .unicode-decode::after {
+        content: " ";
+        background-color: #f0f2f5;
+    }
+
+    .unicode-decode-after {
+        color: #ffffff;
+        background-color: #808080;
+        padding-left: 2px;
+        border-radius: 3px;
+        opacity: 0.3;
+        font-weight: bold;
+        cursor: none;
+        user-select: none;
+    }
+
+    .crlf::before {
+        content: "↵";
+        background-color: rgba(255, 255, 255, 0.5);
+        margin: 4px;
+        padding: 1px 4px; /* 根据需要添加内边距 */
+        border-radius: 3px; /* 添加圆角以使样式更好看 */
+        color: #000000; /* 设置文字颜色为白色，以便在灰色背景上更清晰可见 */
+        opacity: 0.2;
+    }
+
+    .lf::before {
+        content: "↓";
+        background-color: rgba(255, 255, 255, 0.5);
+        margin: 4px;
+        padding: 1px 4px; /* 根据需要添加内边距 */
+        border-radius: 3px; /* 添加圆角以使样式更好看 */
+        color: #000000; /* 设置文字颜色为白色，以便在灰色背景上更清晰可见 */
+        opacity: 0.2;
+    }
+    .hight-light-default-bg-color {
+        background-color: #c6ebd9;
+        z-index: -1;
+    }
+    .hight-light-find-default-bg-color {
+        background: rgba(134, 144, 153, 0.5);
+        // border: 1px solid rgba(95, 102, 109,0.3);
+        z-index: -1;
+    }
+    .hight-light-yak-runner-color {
+        background-color: rgba(255, 182, 96, 0.5);
+        z-index: -1;
+    }
+    .hight-light-rule-color {
+        background-color: rgba(255, 182, 96, 0.5);
+        z-index: -1;
+    }
+}
+.yakit-editor-wrap-style {
+    .crlf::before {
+        opacity: 0;
+    }
+    .lf::before {
+        opacity: 0;
+    }
+}

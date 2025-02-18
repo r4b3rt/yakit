@@ -1,0 +1,48 @@
+.btn-sure {
+    margin-right: 12px;
+}
+
+.private-domain {
+    padding: 24px;
+    .login-title-show {
+        .icon-box {
+            text-align: center;
+            .type-icon-img {
+                width: 120px;
+            }
+        }
+        .title-box {
+            text-align: center;
+            font-size: 30px;
+            padding-bottom: 22px;
+        }
+    }
+    .ant-select-single .ant-select-selector .ant-select-selection-item {
+        visibility: hidden;
+    }
+    .form-item-submit {
+        display: flex;
+        justify-content: center;
+        .ant-form-item-control-input-content {
+            display: flex;
+            align-items: center;
+        }
+    }
+    .form-btns {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+    .form-label {
+        display: flex;
+        align-items: center;
+
+        .info-icon {
+            margin-left: 4px;
+            // cursor: help;
+            svg {
+                color: var(--yakit-helper-text-color);
+            }
+        }
+    }
+}

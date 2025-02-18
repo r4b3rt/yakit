@@ -1,5 +1,6 @@
-const {ipcMain} = require("electron")
-
+const {ipcMain, dialog} = require("electron")
+const path = require("path")
+const fs = require("fs")
 module.exports = (win, getClient) => {
     // asyncQueryYakScript wrapper
     const asyncQueryYakScript = (params) => {
@@ -38,30 +39,6 @@ module.exports = (win, getClient) => {
             if (err) {
                 console.info(`update nuclei template failed: ${err}`)
             }
-        })
-    })
-    ipcMain.handle("auto-update-yak-module", (e) => {
-        let stream = getClient().AutoUpdateYakModule({})
-        stream.on("data", (data) => {
-            if (!win) {
-                return
-            }
-
-            win.webContents.send("client-auto-update-yak-module-data", data)
-        })
-        stream.on("end", (data) => {
-            if (!win) {
-                return
-            }
-
-            win.webContents.send("client-auto-update-yak-module-end")
-        })
-        stream.on("error", (error) => {
-            if (!win) {
-                return
-            }
-
-            win.webContents.send("client-auto-update-yak-module-error", error?.details)
         })
     })
 
@@ -140,6 +117,7 @@ module.exports = (win, getClient) => {
         stream && stream.cancel()
         streamMap.delete(token)
     })
+    // 老版插件批量
     ipcMain.handle("exec-batch-yak-script", async (e, params, token) => {
         let stream = getClient().ExecBatchYakScript(params)
         streamMap.set(token, stream)
@@ -330,20 +308,63 @@ module.exports = (win, getClient) => {
         return await asyncDeleteMarkdownDocument(params)
     })
 
-    // asyncExportYakScript wrapper
-    const asyncExportYakScript = (params) => {
+    ipcMain.handle("openDialog", async (e, params) => {
+        return await new Promise((resolve, reject) => {
+            dialog
+                .showOpenDialog({
+                    ...params
+                })
+                .then((res) => {
+                    if (res) {
+                        let result = {...res}
+                        resolve(result)
+                    } else {
+                        reject("获取文件失败")
+                    }
+                })
+        })
+    })
+
+    // 读取本地文件内容(同时校验其文件大小是否读取本地文件10M，大于则不读取)
+    ipcMain.handle("read-file-content", async (e, params) => {
         return new Promise((resolve, reject) => {
-            getClient().ExportYakScript(params, (err, data) => {
+            fs.readFile(params, "utf-8", function (err, data) {
                 if (err) {
                     reject(err)
-                    return
+                } else {
+                    resolve(data)
                 }
-                resolve(data)
             })
         })
-    }
-    ipcMain.handle("ExportYakScript", async (e, params) => {
-        return await asyncExportYakScript(params)
+    })
+
+    // 拼接路径
+    ipcMain.handle("pathJoin", async (e, params) => {
+        const {dir, file} = params
+        return path.join(dir, file)
+    })
+
+    // 获取上一级的路径
+    ipcMain.handle("pathParent", async (e, params) => {
+        const {filePath} = params
+        return path.dirname(filePath)
+    })
+
+    // 获取路径上的文件名(isExtra是否包含扩展名)
+    ipcMain.handle("pathFileName", async (e, params) => {
+        const {filePath, isExtra = true} = params
+        if (isExtra) {
+            return path.basename(filePath)
+        } else {
+            return path.basename(filePath, path.extname(filePath))
+        }
+    })
+
+    // 获取相对路径
+    ipcMain.handle("relativePathByBase", async (e, params) => {
+        const {basePath, filePath} = params
+        const relativePath = path.relative(basePath, filePath)
+        return relativePath
     })
 
     // asyncQueryYakScriptExecResult wrapper
@@ -409,4 +430,51 @@ module.exports = (win, getClient) => {
         return await asyncDeleteYakScriptExec(params)
     })
 
+    // 获取传入插件名集合在本地插件的详细信息
+    const asyncQueryYakScriptByNames = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().QueryYakScriptByNames(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("QueryYakScriptByNames", async (e, params) => {
+        return await asyncQueryYakScriptByNames(params)
+    })
+
+    // asyncSmokingEvaluatePlugin wrapper
+    const asyncSmokingEvaluatePlugin = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().SmokingEvaluatePlugin(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("SmokingEvaluatePlugin", async (e, params) => {
+        return await asyncSmokingEvaluatePlugin(params)
+    })
+
+    // asyncEvaluateExpression
+    const asyncEvaluateExpression = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().EvaluateExpression(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("EvaluateExpression", async (e, params) => {
+        return await asyncEvaluateExpression(params)
+    })
 }

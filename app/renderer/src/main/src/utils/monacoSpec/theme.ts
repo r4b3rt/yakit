@@ -6,15 +6,31 @@ monaco.editor.defineTheme("kurior", {
     "inherit": true,
     "rules": [
         {
-            "foreground": "#ff0000", "background": "#cc7c22",
+            "foreground":"#bb73ea",
+            "token": "operator"
+        },
+        {
+            "foreground": "#a826a4",
+            "token": "basic.type",
+        },
+        {
+            "foreground": "#c4652f",
+            "token": "globals"
+        },
+        {
+            "foreground": "#c4652f",
+            "token": "libFunction",
+        },
+        {
+            "foreground": "#ff0000",
             "token": "fuzz.tag.inner", fontStyle: "bold underline",
         },
         {
-            "foreground": "#ce00ff", "background": "#cc7c22",
-            "token": "fuzz.tag.outter", fontStyle: "bold underline",
+            "foreground": "#002aff", "background": "#cc7c22",
+            "token": "fuzz.tag.second", fontStyle: "bold underline",
         },
         {
-            "background": "#E8E9E8",
+            "background": "#F0F2F5",
             "token": ""
         },
         {
@@ -27,28 +43,28 @@ monaco.editor.defineTheme("kurior", {
             "token": "http.header.danger", fontStyle: "bold",
         },
         {
-            "foreground": "#d26900",
+            "foreground": "#0080ff",
             "token": "http.header.warning", fontStyle: "bold",
         },
         {
-            "foreground": "#038027",
-            "token": "http.header.info", fontStyle: "bold",
+            "foreground": "#0080ff",
+            "token": "http.header.info", 
         },
-        {"token": "http.method", fontStyle: "bold", foreground: "#00099a"},
+        {"token": "http.header.mime.xml", fontStyle: "bold", foreground: "#b27777"},
+        {"token": "http.header.mime.json", fontStyle: "bold", foreground: "#3d8e86"},
+        {"token": "http.header.mime.urlencoded", fontStyle: "bold", foreground: "#6a5b6d"},
+        {"token": "http.header.mime.form", fontStyle: "bold", foreground: "#814662"},
+        {"token": "http.method", fontStyle: "bold", foreground: "#d56161"},
+        {"token": "http.protocol", fontStyle: "bold", foreground: "#038027"},
+        {"token": "bold-keyword", fontStyle: "bold"},
         {"token": "http.path", fontStyle: "bold", foreground: "#01949a"},
-        {"token": "http.get.query.params", fontStyle: "bold", foreground: "#930d97"},
-        {
-            "foreground": "#078500",
-            "token": "http.cookie.name", fontStyle: "bold",
-        },
-        {
-            "foreground": "#b5890a",
-            "token": "http.header.mime", fontStyle: "bold",
-        },
-        {
-            "foreground": "#808184",
-            "token": "http.cookie.value",
-        },
+        {"token": "http.anchor",  foreground: "#808184"},  
+        {"token": "http.query.params", fontStyle: "bold", foreground: "#d26900"},
+        {"token": "http.query.index", fontStyle: "bold", foreground: "#a67eb7"},
+        {"token": "http.query.index.values", fontStyle: "bold", foreground: "#f57a00"},
+        {"token": "http.query.values", fontStyle: "bold", foreground: "#930d97"},
+        {"foreground": "#639300","token": "json.key", fontStyle: "bold"},
+        {"foreground": "#9C6CFF","token": "json.value", fontStyle: "bold"},
         {
             "foreground": "#808184",
             "token": "string.value", fontStyle: "bold",
@@ -127,7 +143,7 @@ monaco.editor.defineTheme("kurior", {
             "token": "support"
         },
         {
-            "foreground": "#009acd",
+            "foreground": "#883b3b",
             "token": "variable"
         },
         {
@@ -155,6 +171,22 @@ monaco.editor.defineTheme("kurior", {
             "foreground": "#417e00",
             "background": "#c9d4be",
             "token": "string.regexp"
+        },
+        {
+            "foreground": "#B05A3C",
+            "token": "string.escape"
+        },
+        {
+            "foreground": "#6A5ACD",
+            "token": "string.inline.expr"
+        },
+        {
+            "foreground": "#808080",
+            "token": "string.heredoc.delimiter"
+        },
+        {
+            "foreground": "#FF0000",
+            "token": "string.invalid"
         },
         {
             "foreground": "#005273",
@@ -458,7 +490,7 @@ monaco.editor.defineTheme("kurior", {
     ],
     "colors": {
         "editor.foreground": "#363636",
-        "editor.background": "#E8E9E8",
+        "editor.background": "#F0F2F5",
         "editor.selectionBackground": "#F5AA0091",
         "editor.inactiveSelectionBackground": "#F5AA0091",
         "editor.lineHighlightBackground": "#CBDC2F38",

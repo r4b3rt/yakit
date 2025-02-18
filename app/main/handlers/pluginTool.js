@@ -1,106 +1,8 @@
-const {ipcMain} = require("electron")
-const OS = require("os")
-const {USER_INFO} = require("../state")
+const { ipcMain } = require("electron")
+const { USER_INFO } = require("../state")
 const handlerHelper = require("./handleStreamWithContext")
 
 module.exports = (win, getClient) => {
-    const cpuData = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    var time = null
-
-    const cpuAverage = () => {
-        //Initialise sum of idle and time of cores and fetch CPU info
-        var totalIdle = 0,
-            totalTick = 0
-        var cpus = OS.cpus()
-
-        //Loop through CPU cores
-        for (var i = 0, len = cpus.length; i < len; i++) {
-            //Select CPU core
-            var cpu = cpus[i]
-
-            //Total up the time in the cores tick
-            for (type in cpu.times) {
-                totalTick += cpu.times[type]
-            }
-
-            //Total up the idle time of the core
-            totalIdle += cpu.times.idle
-        }
-
-        //Return the average Idle and Tick times
-        return {idle: totalIdle / cpus.length, total: totalTick / cpus.length}
-    }
-
-    // function to calculate average of array
-    const arrAvg = function (arr) {
-        if (arr && arr.length >= 1) {
-            const sumArr = arr.reduce((a, b) => a + b, 0)
-            return sumArr / arr.length
-        }
-    }
-
-    // load average for the past 1000 milliseconds calculated every 100
-    const getCPULoadAVG = (avgTime = 1000, delay = 100) => {
-        return new Promise((resolve, reject) => {
-            const n = ~~(avgTime / delay)
-            if (n <= 1) {
-                reject("Error: interval to small")
-            }
-
-            let i = 0
-            let samples = []
-            const avg1 = cpuAverage()
-
-            let interval = setInterval(() => {
-                if (i >= n) {
-                    clearInterval(interval)
-                    resolve(~~(arrAvg(samples) * 100))
-                }
-
-                const avg2 = cpuAverage()
-                const totalDiff = avg2.total - avg1.total
-                const idleDiff = avg2.idle - avg1.idle
-
-                samples[i] = 1 - idleDiff / totalDiff
-
-                i++
-            }, delay)
-        })
-    }
-
-    // 开始进行CPU和内存使用率计算
-    ipcMain.handle("start-compute-percent", () => {
-        if (time) clearInterval(time)
-        time = setInterval(() => {
-            //cpu
-            getCPULoadAVG(400, 200).then((avg) => {
-                cpuData.shift()
-                cpuData.push(avg)
-            })
-
-            /**
-             * memory计算方式，纯nodejs无法获取准确的内存使用率
-             *
-             * 注：
-             * 可以尝试使用三方库"systeminformation"获取内存详细数据
-             * 但是使用该库将会导致功能明显卡顿(因为该库调用电脑命令或本地文件获取系统信息)
-             */
-        }, 400)
-    })
-    // 获取CPU和内存使用率
-    ipcMain.handle("fetch-compute-percent", () => {
-        return cpuData
-    })
-    // 销毁计算CPU和内存使用率的计数器
-    ipcMain.handle("clear-compute-percent", () => {
-        if (time) clearInterval(time)
-    })
-
-    // 获取操作系统类型
-    ipcMain.handle("fetch-system-name", () => {
-        return OS.type()
-    })
-
     const asyncSetOnlineProfile = (params) => {
         return new Promise((resolve, reject) => {
             getClient().SetOnlineProfile(params, (err, data) => {
@@ -138,7 +40,7 @@ module.exports = (win, getClient) => {
                     reject(err)
                     return
                 }
-                if (params.OnlineID) win.webContents.send("ref-plugin-operator", {pluginOnlineId: params.OnlineID})
+                if (params.OnlineID && params.UUID) win.webContents.send("ref-plugin-operator", { pluginOnlineId: params.OnlineID, pluginUUID: params.UUID })
                 resolve(data)
             })
         })
@@ -148,9 +50,10 @@ module.exports = (win, getClient) => {
         params.Token = USER_INFO.token
         return await asyncDownloadOnlinePluginById(params)
     })
-    const asyncDownloadOnlinePluginByIds = (params) => {
+
+    const asyncDownloadOnlinePluginBatch = (params) => {
         return new Promise((resolve, reject) => {
-            getClient().DownloadOnlinePluginByIds(params, (err, data) => {
+            getClient().DownloadOnlinePluginBatch(params, (err, data) => {
                 if (err) {
                     reject(err)
                     return
@@ -159,25 +62,36 @@ module.exports = (win, getClient) => {
             })
         })
     }
-    // 下载插件
-    ipcMain.handle("DownloadOnlinePluginByIds", async (e, params) => {
+    // 新版-下载插件
+    ipcMain.handle("DownloadOnlinePluginBatch", async (e, params) => {
         params.Token = USER_INFO.token
-        return await asyncDownloadOnlinePluginByIds(params)
+        return await asyncDownloadOnlinePluginBatch(params)
     })
-    // 全部添加
-    const streamDownloadOnlinePluginAll = new Map()
-    ipcMain.handle("cancel-DownloadOnlinePluginAll", handlerHelper.cancelHandler(streamDownloadOnlinePluginAll))
-    ipcMain.handle("DownloadOnlinePluginAll", (e, params, token) => {
-        // params传Token，登录时调用：添加该用户名下的所有插件；不传Token：添加所有的
-        const newParams = {
-            ...params
-        }
-        if (params.isAddToken) {
-            newParams.Token = USER_INFO.token
-        }
-        delete newParams.isAddToken
-        let stream = getClient().DownloadOnlinePluginAll(newParams)
-        handlerHelper.registerHandler(win, stream, streamDownloadOnlinePluginAll, token)
+
+    // 新版-下载所有插件 全部添加
+    const streamDownloadOnlinePluginsAll = new Map()
+    ipcMain.handle("cancel-DownloadOnlinePlugins", handlerHelper.cancelHandler(streamDownloadOnlinePluginsAll))
+    ipcMain.handle("DownloadOnlinePlugins", async (e, params, token) => {
+        params.Token = USER_INFO.token
+        let stream = getClient().DownloadOnlinePlugins(params)
+        handlerHelper.registerHandler(win, stream, streamDownloadOnlinePluginsAll, token)
+    })
+
+    const asyncDownloadOnlinePluginByPluginName = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().DownloadOnlinePluginByPluginName(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 新版-根据插件名称下载插件
+    ipcMain.handle("DownloadOnlinePluginByPluginName", async (e, params) => {
+        params.Token = USER_INFO.token
+        return await asyncDownloadOnlinePluginByPluginName(params)
     })
 
     const asyncDeletePluginByUserID = (params) => {
@@ -226,6 +140,54 @@ module.exports = (win, getClient) => {
         return await asyncGetYakScriptByOnlineID(params)
     })
 
+    const asyncQueryYakScriptLocalAndUser = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().QueryYakScriptLocalAndUser(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    //通过OnlineBaseUrl与UserId 获取所有可上传插件
+    ipcMain.handle("QueryYakScriptLocalAndUser", async (e, params) => {
+        return await asyncQueryYakScriptLocalAndUser(params)
+    })
+
+    const asyncQueryYakScriptByOnlineGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().QueryYakScriptByOnlineGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    //通过OnlineGroup查询
+    ipcMain.handle("QueryYakScriptByOnlineGroup", async (e, params) => {
+        return await asyncQueryYakScriptByOnlineGroup(params)
+    })
+
+    const asyncQueryYakScriptLocalAll = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().QueryYakScriptLocalAll(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    //企业版管理员获取所有可上传插件
+    ipcMain.handle("QueryYakScriptLocalAll", async (e, params) => {
+        return await asyncQueryYakScriptLocalAll(params)
+    })
+
     const asyncGetYakScriptTagsAndType = (params) => {
         return new Promise((resolve, reject) => {
             getClient().GetYakScriptTagsAndType(params, (err, data) => {
@@ -235,7 +197,7 @@ module.exports = (win, getClient) => {
                 }
                 resolve(data)
             })
-        }) 
+        })
     }
     // 统计
     ipcMain.handle("GetYakScriptTagsAndType", async (e, params) => {
@@ -257,5 +219,117 @@ module.exports = (win, getClient) => {
     // 删除本地插件,带条件
     ipcMain.handle("DeleteLocalPluginsByWhere", async (e, params) => {
         return await asyncDeleteLocalPluginsByWhere(params)
+    })
+
+    const asyncQueryYakScriptGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().QueryYakScriptGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 获取插件组数据
+    ipcMain.handle("QueryYakScriptGroup", async (e, params) => {
+        return await asyncQueryYakScriptGroup(params)
+    })
+
+    const asyncRenameYakScriptGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().RenameYakScriptGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 插件组名字修改
+    ipcMain.handle("RenameYakScriptGroup", async (e, params) => {
+        return await asyncRenameYakScriptGroup(params)
+    })
+
+    const asyncDeleteYakScriptGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().DeleteYakScriptGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 插件组删除
+    ipcMain.handle("DeleteYakScriptGroup", async (e, params) => {
+        return await asyncDeleteYakScriptGroup(params)
+    })
+
+    const asyncSetGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().SetGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 插件组新增
+    ipcMain.handle("SetGroup", async (e, params) => {
+        return await asyncSetGroup(params)
+    })
+
+    const asyncGetYakScriptGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().GetYakScriptGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 获取插件所在插件组和其他插件组
+    ipcMain.handle("GetYakScriptGroup", async (e, params) => {
+        return await asyncGetYakScriptGroup(params)
+    })
+
+    const asyncSaveYakScriptGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().SaveYakScriptGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 更新插件所在组&新增插件组
+    ipcMain.handle("SaveYakScriptGroup", async (e, params) => {
+        return await asyncSaveYakScriptGroup(params)
+    })
+
+    const asyncResetYakScriptGroup = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().ResetYakScriptGroup(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    // 重置插件组为线上插件组
+    ipcMain.handle("ResetYakScriptGroup", async (e, params) => {
+        return await asyncResetYakScriptGroup(params)
     })
 }

@@ -17,6 +17,22 @@ module.exports = (win, getClient) => {
         return await asyncGetYakitCompletionRaw(params)
     })
 
+    // asyncGetYakVMBuildInMethodCompletion wrapper
+    const asyncGetYakVMBuildInMethodCompletion = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().GetYakVMBuildInMethodCompletion(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("GetYakVMBuildInMethodCompletion", async (e, params) => {
+        return await asyncGetYakVMBuildInMethodCompletion(params)
+    })
+
     // asyncStaticAnalyzeError wrapper
     const asyncStaticAnalyzeError = (params) => {
         return new Promise((resolve, reject) => {
@@ -31,5 +47,21 @@ module.exports = (win, getClient) => {
     }
     ipcMain.handle("StaticAnalyzeError", async (e, params) => {
         return await asyncStaticAnalyzeError(params)
+    })
+
+    // asyncYaklangCompileAndFormat wrapper
+    const asyncYaklangCompileAndFormat = (params) => {
+        return new Promise((resolve, reject) => {
+            getClient().YaklangCompileAndFormat(params, (err, data) => {
+                if (err) {
+                    reject(err)
+                    return
+                }
+                resolve(data)
+            })
+        })
+    }
+    ipcMain.handle("YaklangCompileAndFormat", async (e, params) => {
+        return await asyncYaklangCompileAndFormat(params)
     })
 }

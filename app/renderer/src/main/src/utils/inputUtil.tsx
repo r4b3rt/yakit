@@ -1,6 +1,5 @@
 import React, {CSSProperties, useEffect, useRef, useState} from "react";
 import {
-    AutoComplete,
     Button,
     Checkbox,
     Col,
@@ -15,7 +14,7 @@ import {
     Switch,
     Tag, Tooltip,
     Typography,
-    Upload
+    Upload,
 } from 'antd';
 import '@ant-design/compatible/assets/index.css';
 import {DeleteOutlined, PlusOutlined} from "@ant-design/icons"
@@ -26,15 +25,36 @@ import "./editableTagsGroup.css"
 import {randomColor} from "./randomUtil";
 import {LiteralUnion} from "antd/lib/_util/type";
 import {FormItemProps} from "@ant-design/compatible/lib/form";
-import {useThrottleFn} from "ahooks";
-import {saveValue} from "./kv";
-import {callCopyToClipboard} from "./basic";
+import "./inputUtil.scss";
+import {YakitButton} from "@/components/yakitUI/YakitButton/YakitButton";
+import {YakitRadioButtons} from "@/components/yakitUI/YakitRadioButtons/YakitRadioButtons";
+import {YakitSwitch} from "@/components/yakitUI/YakitSwitch/YakitSwitch";
+import {YakitInput} from "@/components/yakitUI/YakitInput/YakitInput";
+import {YakitInputNumber} from "@/components/yakitUI/YakitInputNumber/YakitInputNumber";
+import { YakitSelect } from "@/components/yakitUI/YakitSelect/YakitSelect";
+import { YakitAutoComplete } from "@/components/yakitUI/YakitAutoComplete/YakitAutoComplete";
 
-export interface OneLineProp extends JSX.ElementChildrenAttribute {
+type TooltipPlacement =
+    'top'
+    | 'left'
+    | 'right'
+    | 'bottom'
+    | 'topLeft'
+    | 'topRight'
+    | 'bottomLeft'
+    | 'bottomRight'
+    | 'leftTop'
+    | 'leftBottom'
+    | 'rightTop'
+    | 'rightBottom';
+
+export interface OneLineProp {
     width?: string | number
     overflow?: string
     maxWidth?: string | any
     title?: string
+    children?: React.ReactNode
+    placement?: TooltipPlacement
 }
 
 export const OneLine: React.FC<OneLineProp> = (props) => {
@@ -46,7 +66,7 @@ export const OneLine: React.FC<OneLineProp> = (props) => {
             maxWidth: props.maxWidth,
             textOverflow: "ellipsis"// props.overflow === "hidden" ? "ellipsis" : undefined
         }}>
-        {props?.title ? <Tooltip title={props.title}>
+        {props?.title ? <Tooltip title={props.title} placement={props.placement}>
             {props.children}
         </Tooltip> : props.children}
     </div>
@@ -94,7 +114,7 @@ export const InputItem: React.FC<InputItemProps> = (props) => {
         help={props.help}
     >
         {props.prefixNode}
-        {props.autoComplete ? <AutoComplete
+        {props.autoComplete ? <YakitAutoComplete
             style={{width: props.width || "100%"}}
             dropdownMatchSelectWidth={400}
             disabled={!!props.disable}
@@ -102,10 +122,16 @@ export const InputItem: React.FC<InputItemProps> = (props) => {
             allowClear={true}
             value={props.value} onChange={e => props.setValue && props.setValue(e)}
             options={(props.autoComplete || []).map(i => {
-                return {value: i}
+                return {value: i, label: i}
             })}
+            onFocus={(e) => {
+                if (props.isBubbing) e.stopPropagation()
+            }}
+            onClick={(e) => {
+                if (props.isBubbing) e.stopPropagation()
+            }}
         /> : props.textarea ? <>
-            <Input.TextArea
+            <YakitInput.TextArea
                 style={{width: props.width}}
                 // type={props.type}
                 rows={props.textareaRow}
@@ -129,11 +155,12 @@ export const InputItem: React.FC<InputItemProps> = (props) => {
                     if (props.isBubbing) e.stopPropagation()
                 }}
             />
-        </> : <Input
+        </> : <YakitInput
             style={{width: props.width}}
             type={props.type}
             required={!!props.required}
             disabled={!!props.disable}
+            spellCheck={false}
             placeholder={props.placeholder}
             allowClear={props.allowClear}
             value={props.value} onChange={e => {
@@ -240,7 +267,7 @@ export const InputStringOrJsonItem: React.FC<InputStringOrJsonItemProps> = (prop
                         <Col span={10}>
                             {props.valueIsStringArray ? <div style={{width: "100%"}}>
                                 <OneLine>
-                                    <Select
+                                    <YakitSelect
                                         style={{width: "100%"}}
                                         allowClear={true}
                                         autoClearSearchValue={true}
@@ -321,7 +348,9 @@ export interface SelectOneProps extends InputBase {
     value?: any
     help?: string
     colon?: boolean
+    placeholder?: string
     size?: any
+    oldTheme?: boolean
 
     setValue?(a: any): any
 
@@ -329,19 +358,38 @@ export interface SelectOneProps extends InputBase {
     formItemStyle?: CSSProperties
 }
 
-export const SelectOne: React.FC<SelectOneProps> = (p) => {
-    // const [current, setCurrent] = useState<any>();
-    return <Item label={p.label} help={p.help} colon={p.colon} style={{...p.formItemStyle}}>
-        <Radio.Group onChange={e => {
-            // setCurrent(e.target.value)
-            p.setValue && p.setValue(e.target.value)
-        }} value={p.value} buttonStyle="solid" size={p.size}>
-            {p.data.map(e => <Radio.Button
+/*
+* <Radio.Button
+                style={{borderRadius: "6px"}}
                 key={`${e.value}`}
                 // type={current == e.value ? "primary" : undefined}
                 disabled={(p.value === e.value ? false : !!p.disabled) || e.disabled}
-                value={e.value}>{e.text}</Radio.Button>)}
-        </Radio.Group>
+                value={e.value}>{e.text}</Radio.Button>
+* */
+export const SelectOne: React.FC<SelectOneProps> = (p) => {
+    // const [current, setCurrent] = useState<any>();
+    return <Item label={p.label} help={p.help} colon={p.colon} style={{...p.formItemStyle}}>
+        <YakitRadioButtons
+            className={
+                (p.oldTheme || p.oldTheme === undefined) ? "old-theme-html select-one" : "select-one"
+            }
+            disabled={p.disabled}
+            size={p.size}
+            value={p.value}
+            onChange={(e) => {
+                // setCurrent(e.target.value)
+                p.setValue && p.setValue(e.target.value)
+            }}
+            buttonStyle='solid'
+            options={p.data.map(item => {
+                const info = {
+                    value: item.value,
+                    label: item.text,
+                    disabled: item.disabled
+                }
+                return info
+            })}
+        />
     </Item>
 };
 
@@ -349,6 +397,7 @@ export interface InputBase {
     label?: string | any
     help?: any
     formItemStyle?: CSSProperties
+    oldTheme?: boolean
 }
 
 export interface InputTimePointProps extends InputBase {
@@ -397,7 +446,7 @@ export const InputFloat: React.FC<InputNumberProps> = (p) => {
 
 export const InputInteger: React.FC<InputNumberProps> = (p) => {
     return <Item label={p.label} style={{...p.formItemStyle}} help={p.help}>
-        <InputNumber width={p.width && "100%"} disabled={p.disable} style={{width: p.width}}
+        <YakitInputNumber width={p.width && "100%"} disabled={p.disable} style={{width: p.width}}
                      defaultValue={p.defaultValue} size={p.size}
                      min={p.min} max={p.max} step={1} value={p.value} onChange={e => p.setValue(e as number)}/>
     </Item>
@@ -406,7 +455,7 @@ export const InputInteger: React.FC<InputNumberProps> = (p) => {
 export interface MultiSelectForStringProps extends InputBase {
     value?: string
     mode?: "multiple" | "tags"
-    help?: string
+    help?: any
 
     defaultSep?: string
 
@@ -436,7 +485,7 @@ export const ManyMultiSelectForString: React.FC<MultiSelectForStringProps> = (p)
         value = p.value?.split(sep) || []
     }
     return <Item label={p.label} help={p.help} style={p.formItemStyle}>
-        <Select
+        <YakitSelect
             disabled={p.disabled}
             style={{width: "200"}}
             allowClear={true}
@@ -450,12 +499,12 @@ export const ManyMultiSelectForString: React.FC<MultiSelectForStringProps> = (p)
             placeholder={p.placeholder}
         >
             {p.data.map(i => {
-                return <Select.Option
+                return <YakitSelect.Option
                     key={`${i.value}`}
                     value={i.value.toString()}
-                >{i?.label?.toString()}</Select.Option>
+                >{i?.label?.toString()}</YakitSelect.Option>
             })}
-        </Select>
+        </YakitSelect>
     </Item>
 }
 
@@ -484,6 +533,7 @@ export interface SwitchItemProps extends InputBase {
     help?: string
     disabled?: boolean
 
+    oldTheme?: boolean
     setValue(b: boolean): any
 }
 
@@ -495,6 +545,9 @@ export interface InputFileNameItemProps {
     filename?: string
     setFileName?: (i: string) => any
     accept?: string[]
+    required?: boolean
+    disabled?: boolean
+    autoComplete?: string[]
 
     // 提示信息内容组件
     hint?: React.ReactNode
@@ -503,8 +556,9 @@ export interface InputFileNameItemProps {
 const {ipcRenderer} = window.require("electron");
 export const InputFileNameItem: React.FC<InputFileNameItemProps> = p => {
     const [uploadLoading, setUploadLoading] = useState(false);
-    return <Item label={p.label}>
+    return <Item label={p.label} required={p.required}>
         <Upload.Dragger
+            disabled={p.disabled}
             className='targets-upload-dragger'
             accept={(p.accept || [])?.join(",")}
             multiple={false}
@@ -535,14 +589,15 @@ export const InputFileNameItem: React.FC<InputFileNameItemProps> = p => {
                     placeholder="请输入绝对路径"
                     isBubbing={true}
                     help={p.hint ? p.hint : (<div>
-                        可将文件拖入框内或<span style={{color: 'rgb(25,143,255)'}}>点击此处</span>上传
+                        可将文件拖入框内或<span style={{color: 'var(--yakit-primary-5'}}>点击此处</span>上传
                     </div>)}
                 /> : <InputItem
+                    autoComplete={p.autoComplete}
                     label={""}
                     value={p.filename} setValue={f => p.setFileName && p.setFileName(f)}
                     placeholder="请输入绝对路径"
                     isBubbing={true} allowClear={false} help={p.hint ? p.hint : (<div>
-                    可将文件拖入框内或<span style={{color: 'rgb(25,143,255)'}}>点击此处</span>上传
+                    可将文件拖入框内或<span style={{color: 'var(--yakit-primary-5'}}>点击此处</span>上传
                 </div>)}
                 />
                 }
@@ -553,8 +608,8 @@ export const InputFileNameItem: React.FC<InputFileNameItemProps> = p => {
 }
 
 export const SwitchItem: React.FC<SwitchItemProps> = p => {
-    return <Item label={p.label} help={p.help} style={p.formItemStyle}>
-        <Switch checked={p.value} onChange={e => p.setValue(e)} size={p.size} disabled={p.disabled}/>
+    return <Item className={(p.oldTheme === undefined || p.oldTheme) ? "old-theme-html" : undefined} label={p.label} help={p.help} style={p.formItemStyle}>
+        <YakitSwitch checked={p.value} onChange={e => p.setValue(e)} disabled={p.disabled}/>
     </Item>
 }
 
@@ -595,7 +650,7 @@ const EditableTags: React.FC<EditableTagsProps> = (p) => {
         setValue("");
         p.onCreated && p.onCreated(value)
     };
-    const inputRef = useRef<Input>(null);
+    const inputRef = useRef<any>(null);
 
     useEffect(() => {
         if (inputVisible) {
@@ -673,14 +728,15 @@ export const EditableTagsGroup: React.FC<EditableTagsGroupProps> = (p) => {
 
 export const ManySelectOne: React.FC<SelectOneProps> = (p) => {
     return <Item label={p.label} help={p.help} style={{...p.formItemStyle}}>
-        <Select
+        <YakitSelect
             value={p.value} onChange={e => p.setValue && p.setValue(e)}
             disabled={p.disabled} size={p.size}
+            placeholder={p.placeholder}
         >
-            {p.data.map(e => <Select.Option key={e.value} value={e.value}>
+            {p.data.map(e => <YakitSelect.Option key={e.value} value={e.value}>
                 {e.text}
-            </Select.Option>)}
-        </Select>
+            </YakitSelect.Option>)}
+        </YakitSelect>
     </Item>
 }
 

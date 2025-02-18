@@ -5,7 +5,7 @@ import "./style.css"
 
 export interface TableResizableColumnProp<T> extends TableProps {
     columns: any[]
-    data: T[]
+    // data: T[]
     sortFilter: (col: string, type: any) => any
     tableRef?: any
 }
@@ -19,6 +19,7 @@ export function TableResizableColumn<T>(props: TableResizableColumnProp<T>) {
     const [cols, setCols] = useState(props.columns)
     const [sortColumn, setSortColumn] = useState("")
     const [sortType, setSortType] = useState()
+    const [colsWidth,setColsWidth] = useState({})
 
     useEffect(() => {
         setCols(props.columns)
@@ -45,7 +46,9 @@ export function TableResizableColumn<T>(props: TableResizableColumnProp<T>) {
             {cols.map((item) => {
                 const {headRender, cellRender, ...restCol} = item
                 return (
-                    <Column key={item.dataKey} {...(restCol as ColumnProps)}>
+                    <Column key={item.dataKey} {...(restCol as ColumnProps)} onResize={(columnWidth,dataKey)=>{
+                        setColsWidth({...colsWidth,[dataKey||""]:columnWidth})
+                    }} width={colsWidth.hasOwnProperty(item.dataKey)?colsWidth[item.dataKey]:item.width}>
                         <HeaderCell>{item.headRender()}</HeaderCell>
                         <CellRender
                             dataKey={item.dataKey}
